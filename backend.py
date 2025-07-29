@@ -49,20 +49,24 @@ class EducationAgent:
             json.dump(self.memory, f)
 
     def _orchestrate_task(self, task: str) -> List[Dict]:
-        """
-        Break down a task into subtasks using GPT-4-turbo.
-        Example: "Find PhD programs in Germany" → [Search, Filter, Recommend]
-        """
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": "You are a task decomposition expert."},
-                {"role": "user", "content": f"Break this task into steps: {task}"}
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"}
-        )
-        return json.loads(response.choices[0].message.content).get("steps", [])
+    """
+    Break down a task into subtasks using GPT-4-turbo.
+    Example: "Find PhD programs in Germany" → [Search, Filter, Recommend]
+    """
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": "You are a task decomposition expert."},
+            {"role": "user", "content": f"Break this task into steps: {task}"}
+        ],
+        temperature=0.3
+    )
+
+    try:
+        parsed = json.loads(response.choices[0].message.content)
+        return parsed.get("steps", [])
+    except Exception:
+        return []
 
     def _use_tool(self, tool_name: str, params: Dict) -> Optional[Dict]:
         """Execute a tool (Google Search, browser, etc.)."""
