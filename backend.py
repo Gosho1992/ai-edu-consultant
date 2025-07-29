@@ -67,7 +67,7 @@ class EducationAgent:
         return parsed.get("steps", [])
     except Exception:
         return []
-
+        
     def _use_tool(self, tool_name: str, params: Dict) -> Optional[Dict]:
         """Execute a tool (Google Search, browser, etc.)."""
         if tool_name == "google_search":
