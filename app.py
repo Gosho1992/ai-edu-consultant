@@ -1,5 +1,5 @@
 import streamlit as st
-from your_backend import EducationAgent  # Import your existing backend class
+from backend import EducationAgent  # Import your existing backend class
 import json
 
 # Initialize the AI agent
