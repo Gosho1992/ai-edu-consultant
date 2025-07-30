@@ -1,4 +1,3 @@
-
 import os
 import json
 import requests
@@ -35,6 +34,7 @@ class EducationAgent:
         self._load_memory()
 
     def _load_memory(self) -> None:
+        """Load past user profiles from a JSON file."""
         try:
             with open(self.memory_file, "r") as f:
                 self.memory = json.load(f)
@@ -42,12 +42,14 @@ class EducationAgent:
             self.memory = {}
 
     def _save_memory(self) -> None:
+        """Save the current session to memory."""
         timestamp = datetime.now().isoformat()
         self.memory[timestamp] = self.user_profile
         with open(self.memory_file, "w") as f:
             json.dump(self.memory, f)
 
     def _orchestrate_task(self, task: str) -> List[Dict]:
+        """Break down a task into subtasks using GPT-4-turbo."""
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
@@ -63,6 +65,7 @@ class EducationAgent:
             return []
 
     def _use_tool(self, tool_name: str, params: Dict) -> Optional[Dict]:
+        """Execute a tool (Google Search, browser, etc.)."""
         if tool_name == "google_search":
             query = params.get("query", "")
             res = requests.get(
@@ -96,8 +99,8 @@ class EducationAgent:
             task = f"Find {self.user_profile.get('degree', '')} programs in {self.user_profile.get('country', '')}"
             steps = self._orchestrate_task(task)
 
-            if steps and steps[0].get("tool") == "google_search":
-                results = self._use_tool("google_search", {"query": steps[0].get("query", "")})
+            if steps and steps[0]["tool"] == "google_search":
+                results = self._use_tool("google_search", {"query": steps[0]["query"]})
                 return self._format_results(results)
 
             return "🔍 No results found."
@@ -123,6 +126,7 @@ class EducationAgent:
                 {"role": "system", "content": "You are a profile data extractor."},
                 {"role": "user", "content": prompt}
             ],
+            response_format={"type": "json_object"}
         )
         extracted = json.loads(response.choices[0].message.content)
         self.user_profile.update(extracted)
@@ -131,7 +135,6 @@ class EducationAgent:
     def _format_results(self, search_results: List[Dict]) -> str:
         if not search_results:
             return "🔍 No results found."
-
         formatted = []
         for idx, item in enumerate(search_results[:3], 1):
             formatted.append(
