@@ -1,5 +1,6 @@
-openai>=1.12.0        # For GPT-4-turbo and Assistants API
-python-dotenv>=1.0.0  # Load .env files (API keys)
-requests>=2.31.0      # HTTP calls (Google Search API)
-# Streamlit frontend (if not already installed)
-streamlit>=1.32.0     # For the web UI
+openai>=1.12.0            # For GPT-4-turbo and Assistants API
+python-dotenv>=1.0.0      # Load .env files (API keys)
+requests>=2.31.0          # HTTP calls (Google Search API)
+streamlit>=1.32.0         # For the web UI
+fuzzywuzzy==0.18.0        # For fuzzy string matching (backend)
+python-Levenshtein==0.12.2 # Speeds up fuzzywuzzy performance
