@@ -1,5 +1,5 @@
 import streamlit as st
-from education_agent import EducationAgent
+from backend import EducationAgent
 
 # Set up the app
 st.set_page_config(page_title="EduBot", page_icon="🎓")
