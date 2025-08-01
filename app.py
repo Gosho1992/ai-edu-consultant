@@ -21,7 +21,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask me about universities..."):
+if prompt := st.chat_input("Ask me about universities or scholarships..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -34,6 +34,16 @@ if prompt := st.chat_input("Ask me about universities..."):
         with st.spinner("Thinking..."):
             response = st.session_state.agent.chat(prompt)
         st.markdown(response)
+        
+        # 👇 Optional footer for scholarship answers
+        if "scholarship" in prompt.lower():
+            st.markdown(
+                """
+                <div style="margin-top: 1rem; font-size: 0.85rem; color: gray;">
+                📌 <em>Scholarship summaries are sourced via public RSS feeds from ScholarshipsCorner and ScholarshipUnion. For complete details, always refer to the original websites.</em>
+                </div>
+                """, unsafe_allow_html=True
+            )
     
     # Add AI response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
