@@ -7,8 +7,8 @@ from datetime import datetime
 import logging
 
 from rss_fetcher import fetch_rss_scholarships
-from document_parser import parse_uploaded_file
-from url_analyzer import analyze_url_content
+from parse_uploaded_file import parse_uploaded_file
+from content_analyzer import analyze_url_content
 
 # Load env and initialize OpenAI
 load_dotenv()
@@ -183,3 +183,4 @@ Focus:
             temperature=0.7
         )
         return response.choices[0].message.content
+
