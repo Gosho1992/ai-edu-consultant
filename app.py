@@ -1,5 +1,5 @@
 import streamlit as st
-from backend.agent import EducationAgent
+from backend import EducationAgent
 
 # Set up the app
 st.set_page_config(page_title="EduBot", page_icon="🎓")
@@ -71,3 +71,4 @@ if st.session_state.get("last_scholarship"):
               on_click=lambda: st.session_state.messages.append(
                   {"role": "user", "content": "Help me apply to the last scholarship"}
               ))
+
