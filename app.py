@@ -1,5 +1,5 @@
 import streamlit as st
-from backend import EducationAgent
+from backend.agent import EducationAgent
 
 # Set up the app
 st.set_page_config(page_title="EduBot", page_icon="🎓")
@@ -15,27 +15,44 @@ if "agent" not in st.session_state:
 st.title("🎓 EduBot - AI Education Consultant")
 st.caption("A ChatGPT-like interface for university guidance")
 
-# Display chat messages
+# --- Sidebar Tools ---
+with st.sidebar:
+    st.header("📁 Document Tools")
+    uploaded_file = st.file_uploader("Upload CV/Transcript", type=["pdf", "png", "jpg"])
+    
+    if uploaded_file:
+        with st.spinner("Analyzing document..."):
+            feedback = st.session_state.agent.analyze_document(
+                uploaded_file.getvalue(),
+                uploaded_file.type
+            )
+        st.success("✅ Analysis Complete")
+        st.markdown(f"### Feedback:\n{feedback}")
+
+# --- Display previous chat messages ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Chat input
-if prompt := st.chat_input("Ask me about universities or scholarships..."):
-    # Add user message to chat history
+# --- Chat input handler ---
+if prompt := st.chat_input("Ask me about universities, scholarships, or paste a link..."):
+    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Display user message
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Get AI response
+    # AI response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = st.session_state.agent.chat(prompt)
+            if "http" in prompt:
+                response = st.session_state.agent.analyze_scholarship_url(prompt)
+            else:
+                response = st.session_state.agent.chat(prompt)
         st.markdown(response)
-        
-        # 👇 Optional footer for scholarship answers
+
+        # Optional scholarship footer
         if "scholarship" in prompt.lower():
             st.markdown(
                 """
@@ -44,6 +61,13 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 </div>
                 """, unsafe_allow_html=True
             )
-    
-    # Add AI response to chat history
+
+    # Save assistant message
     st.session_state.messages.append({"role": "assistant", "content": response})
+
+# --- Tailored Application Button ---
+if st.session_state.get("last_scholarship"):
+    st.button("🤖 Get help tailoring your application", 
+              on_click=lambda: st.session_state.messages.append(
+                  {"role": "user", "content": "Help me apply to the last scholarship"}
+              ))
