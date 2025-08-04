@@ -5,3 +5,7 @@ streamlit>=1.32.0         # For the web UI
 fuzzywuzzy==0.18.0        # For fuzzy string matching (backend)
 python-Levenshtein==0.12.2 # Speeds up fuzzywuzzy performance
 feedparser==6.0.11
+pdfplumber>=0.10.0
+pytesseract>=0.3.10
+pillow>=10.0.0
+beautifulsoup4>=4.12.0
