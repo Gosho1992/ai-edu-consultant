@@ -73,7 +73,6 @@ class EducationAgent:
     def _init_services(self):
         """Microservices architecture"""
         self.services = {
-            "university_db": self._load_university_database(),
             "scholarship_feeds": [
                 "https://scholarshipscorner.website/feed/",
                 "https://scholarshipunion.com/feed/"
@@ -225,14 +224,6 @@ class EducationAgent:
         }
 
 # --- Supporting Functions ---
-def _load_university_database():
-    """Load optimized university dataset"""
-    try:
-        with open("data/universities.json") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logging.warning("Local university database not found")
-        return []
 
 def _fetch_scholarships():
     """Multi-source scholarship aggregator"""
@@ -252,6 +243,7 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
 
 
 
