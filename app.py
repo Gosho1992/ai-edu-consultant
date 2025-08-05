@@ -1,6 +1,43 @@
 import streamlit as st
 from backend import EducationAgent
 
+import streamlit as st
+
+def set_video_background_from_github():
+    video_url = "https://raw.githubusercontent.com/Gosho1992/ai-edu-consultant/main/static/backgroundvideo.mp4"
+
+    video_html = f"""
+    <style>
+    #root > div:first-child {{
+        position: relative;
+    }}
+    #root > div:first-child::before {{
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        background: rgba(255,255,255,0.7);
+    }}
+    #bgVideo {{
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        min-width: 100%;
+        min-height: 100%;
+        z-index: -2;
+        opacity: 0.3;
+    }}
+    </style>
+    <video autoplay muted loop id="bgVideo">
+        <source src="{video_url}" type="video/mp4">
+    </video>
+    """
+    st.markdown(video_html, unsafe_allow_html=True)
+
+    
 # Set up the app
 st.set_page_config(page_title="EduBot", page_icon="🎓")
 
@@ -71,4 +108,5 @@ if st.session_state.get("last_scholarship"):
               on_click=lambda: st.session_state.messages.append(
                   {"role": "user", "content": "Help me apply to the last scholarship"}
               ))
+
 
