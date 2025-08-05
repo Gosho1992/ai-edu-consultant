@@ -34,7 +34,7 @@ class SecurityManager:
             raise HTTPException(403, "Invalid API key")
         return True
 
-class EducatonAgent:
+class EducationAgent:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -252,5 +252,6 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
 
 
