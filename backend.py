@@ -1,3 +1,6 @@
+from fastapi.security import APIKeyHeader
+api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+
 import os
 import json
 import hashlib
@@ -17,6 +20,7 @@ from PIL import Image
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
+
 
 # --- Configuration ---
 load_dotenv()
@@ -248,3 +252,4 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
