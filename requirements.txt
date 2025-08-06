@@ -16,5 +16,7 @@ uvicorn>=0.24.0              # ASGI server to run FastAPI
 scikit-learn>=1.3.0          # For cosine similarity
 gspread
 oauth2client
+torch>=2.0.0
+
 
 
