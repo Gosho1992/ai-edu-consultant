@@ -20,7 +20,7 @@ from PIL import Image
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
-
+import feedparser
 
 # --- Configuration ---
 load_dotenv()
@@ -47,10 +47,9 @@ class EducationAgent:
         self._setup_monitoring()
 
     def _init_user_profile(self):
-        """Next-gen user context tracking"""
         self.user = {
             "academic": {
-                "degree": None,  # Bachelor's, Master's, PhD
+                "degree": None,
                 "field": None,
                 "gpa": None,
                 "target_countries": []
@@ -71,7 +70,6 @@ class EducationAgent:
         }
 
     def _init_services(self):
-        """Microservices architecture"""
         self.services = {
             "scholarship_feeds": [
                 "https://scholarshipscorner.website/feed/",
@@ -80,11 +78,11 @@ class EducationAgent:
             "apis": {
                 "universities": "http://universities.hipolabs.com/search",
                 "ranking": "https://edurank.org/api/unis.json"
-            }
+            },
+            "university_db": []  # placeholder to avoid key error
         }
 
     def _setup_monitoring(self):
-        """Real-time performance tracking"""
         self.metrics = {
             "gpt_calls": 0,
             "cache_hits": 0,
@@ -96,9 +94,7 @@ class EducationAgent:
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
 
-    # --- Core AI Engine ---
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-        """Advanced response generation with hybrid caching"""
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
 
         if cache_key in self.cache:
@@ -114,41 +110,28 @@ class EducationAgent:
                 max_tokens=1500
             )
 
-            # Store response time as float seconds for metrics
             response_time = (datetime.now() - start_time).total_seconds()
             self.metrics["response_times"].append(response_time)
             self.metrics["gpt_calls"] += 1
 
             result = response.choices[0].message.content
-            self.cache.set(cache_key, result, expire=timedelta(hours=24))
+            self.cache.set(cache_key, result, expire=24 * 3600)
             return result
 
         except Exception as e:
             logging.error(f"Error generating response: {str(e)}")
             return "Sorry, I encountered an error processing your request. Please try again."
 
-        self.metrics["gpt_calls"] += 1
-        self.metrics["response_times"].append((datetime.now() - start_time).total_seconds())
-
-        result = response.choices[0].message.content
-        self.cache.set(cache_key, result, expire=24 * 3600)
-        return result
-
-    # --- University Intelligence ---
     def find_universities(self) -> Dict:
-        """3-tier university discovery system"""
         try:
-            # 1. Check local database
             local_results = self._query_local_db()
             if local_results:
                 return {"source": "local_db", "data": local_results}
 
-            # 2. Try external APIs
             api_results = self._query_university_api()
             if api_results:
                 return {"source": "api", "data": api_results}
 
-            # 3. GPT-4 fallback
             gpt_results = self._generate_gpt_recommendations()
             return {"source": "gpt", "data": gpt_results}
 
@@ -157,14 +140,11 @@ class EducationAgent:
             return {"source": "error", "data": "Unable to fetch university information at this time"}
 
     def _query_local_db(self) -> Optional[List]:
-        """Query optimized local dataset"""
-        return [uni for uni in self.services["university_db"] 
+        return [uni for uni in self.services["university_db"]
                 if uni["country"] in self.user["academic"]["target_countries"]
                 and self.user["academic"]["field"].lower() in uni["programs"]]
 
-    # --- Document Analysis Suite ---
     def analyze_document(self, file: bytes, doc_type: str) -> Dict:
-        """Multi-format document intelligence"""
         analysis = {
             "text": self._extract_text(file, doc_type),
             "feedback": None,
@@ -182,7 +162,6 @@ class EducationAgent:
         return analysis
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
-        """Universal text extractor"""
         if doc_type == "pdf":
             with pdfplumber.open(file) as pdf:
                 return "\n".join([page.extract_text() for page in pdf.pages])
@@ -191,9 +170,7 @@ class EducationAgent:
         else:
             raise ValueError("Unsupported format")
 
-    # --- Scholarship Engine ---
     def find_scholarships(self, query: str = None) -> List[Dict]:
-        """Semantic scholarship matching"""
         all_scholarships = self._fetch_scholarships()
 
         if query:
@@ -209,9 +186,7 @@ class EducationAgent:
 
         return all_scholarships[:10]
 
-    # --- Proactive Engagement System ---
     def suggest_next_steps(self) -> List[str]:
-        """AI-powered action recommendations"""
         context = f"""
         User Profile:
         - Degree: {self.user['academic']['degree']}
@@ -224,18 +199,14 @@ class EducationAgent:
             "Suggest 3 personalized next steps for this student:\n" + context
         ).split("\n")
 
-    # --- Security Layer ---
     def validate_input(self, text: str) -> bool:
-        """Advanced injection protection"""
         blacklist = [
-            "ignore previous", "###", "system prompt", 
+            "ignore previous", "###", "system prompt",
             "as an AI", "your instructions"
         ]
         return not any(phrase in text.lower() for phrase in blacklist)
 
-    # --- Monitoring Endpoints ---
     def get_metrics(self) -> Dict:
-        """Real-time performance analytics"""
         try:
             avg_time = 0.0
             if self.metrics["response_times"]:
@@ -257,10 +228,12 @@ class EducationAgent:
 # --- Supporting Functions ---
 
 def _fetch_scholarships():
-    """Multi-source scholarship aggregator"""
     all_scholarships = []
-    for feed_url in self.services["scholarship_feeds"]:
-        try:
+    try:
+        for feed_url in [
+            "https://scholarshipscorner.website/feed/",
+            "https://scholarshipunion.com/feed/"
+        ]:
             feed = feedparser.parse(feed_url)
             all_scholarships.extend([
                 {
@@ -269,9 +242,8 @@ def _fetch_scholarships():
                     "deadline": entry.get("deadline", ""),
                     "amount": entry.get("amount", "Not specified")
                 }
-                for entry in feed.entries[:10]  # Limit per feed
+                for entry in feed.entries[:10]
             ])
-        except Exception as e:
-            logging.error(f"Failed to parse {feed_url}: {str(e)}")
+    except Exception as e:
+        logging.error(f"Failed to fetch scholarships: {str(e)}")
     return all_scholarships
-
