@@ -95,32 +95,47 @@ class EducationAgent:
         )
 
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-        cache_key = hashlib.md5(prompt.encode()).hexdigest()
+    cache_key = hashlib.md5(prompt.encode()).hexdigest()
 
-        if cache_key in self.cache:
-            self.metrics["cache_hits"] += 1
-            return self.cache[cache_key]
+    if cache_key in self.cache:
+        self.metrics["cache_hits"] += 1
+        return self.cache[cache_key]
 
-        start_time = datetime.now()
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=context or [{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=1500
-            )
+    start_time = datetime.now()
 
-            response_time = (datetime.now() - start_time).total_seconds()
-            self.metrics["response_times"].append(response_time)
-            self.metrics["gpt_calls"] += 1
+    try:
+        # Inject scholarships from RSS
+        scholarships = self._fetch_scholarships()
+        scholarship_text = "\n".join([
+            f"- {item['title']} ({item['link']})" for item in scholarships
+        ])
+        enhanced_prompt = f"""
+You are a scholarship assistant. Here is a list of current scholarships fetched live:
 
-            result = response.choices[0].message.content
-            self.cache.set(cache_key, result, expire=24 * 3600)
-            return result
+{scholarship_text}
 
-        except Exception as e:
-            logging.error(f"Error generating response: {str(e)}")
-            return "Sorry, I encountered an error processing your request. Please try again."
+Now, answer this user query using the above info where possible:
+{prompt}
+"""
+
+        response = self.client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=context or [{"role": "user", "content": enhanced_prompt}],
+            temperature=0.7,
+            max_tokens=1500
+        )
+
+        response_time = (datetime.now() - start_time).total_seconds()
+        self.metrics["response_times"].append(response_time)
+        self.metrics["gpt_calls"] += 1
+
+        result = response.choices[0].message.content
+        self.cache.set(cache_key, result, expire=24 * 3600)
+        return result
+
+    except Exception as e:
+        logging.error(f"Error generating response: {str(e)}")
+        return "Sorry, I encountered an error processing your request. Please try again."
 
     def find_universities(self) -> Dict:
         try:
@@ -227,23 +242,21 @@ class EducationAgent:
 
 # --- Supporting Functions ---
 
-def _fetch_scholarships():
+def _fetch_scholarships(self) -> List[Dict]:
     all_scholarships = []
-    try:
-        for feed_url in [
-            "https://scholarshipscorner.website/feed/",
-            "https://scholarshipunion.com/feed/"
-        ]:
+    for feed_url in self.services["scholarship_feeds"]:
+        try:
             feed = feedparser.parse(feed_url)
             all_scholarships.extend([
                 {
                     "title": entry.title,
                     "link": entry.link,
-                    "deadline": entry.get("deadline", ""),
-                    "amount": entry.get("amount", "Not specified")
+                    "summary": entry.get("summary", "No details available")
                 }
-                for entry in feed.entries[:10]
+                for entry in feed.entries[:5]  # Top 5 per feed
             ])
-    except Exception as e:
-        logging.error(f"Failed to fetch scholarships: {str(e)}")
+        except Exception as e:
+            logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
+
