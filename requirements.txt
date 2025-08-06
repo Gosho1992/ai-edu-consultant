@@ -17,6 +17,10 @@ scikit-learn>=1.3.0          # For cosine similarity
 gspread
 oauth2client
 torch>=2.0.0
+python-docx>=0.8.11
+pymupdf>=1.23.0
+python-magic>=0.4.27
+
 
 
 
