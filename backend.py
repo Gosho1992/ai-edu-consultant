@@ -22,6 +22,9 @@ import requests
 from bs4 import BeautifulSoup
 import feedparser
 import io
+import magic
+from typing import Dict, Union
+from pathlib import Path
 
 # --- Configuration ---
 load_dotenv()
@@ -160,33 +163,47 @@ Now, answer this user query using the above info where possible:
                 if uni["country"] in self.user["academic"]["target_countries"]
                 and self.user["academic"]["field"].lower() in uni["programs"]]
 
-    def analyze_document(self, file: bytes, doc_type: str) -> Dict:
-        analysis = {
-            "text": self._extract_text(file, doc_type),
-            "feedback": None,
-            "enhanced_version": None
-        }
+    def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
+    """Robust document analysis with format detection"""
+    try:
+        # Validate file type
+        file_type = self._detect_file_type(file_bytes, filename)
+        if not self._is_supported(file_type, doc_type):
+            return {"error": f"Unsupported {file_type} for {doc_type} analysis"}
 
-        analysis["feedback"] = self.generate_response(
-            f"Provide career-focused analysis of this {doc_type}:\n{analysis['text']}\n"
-            "Focus on:\n1. Keyword optimization\n2. Structure improvements\n3. ATS compatibility"
-        )
+        # Process based on actual type
+        if file_type == "pdf":
+            text = self._extract_pdf(file_bytes)
+        elif file_type == "docx":
+            text = self._extract_docx(file_bytes)
+        elif file_type in ("jpg", "png"):
+            text = self._extract_image(file_bytes)
+        else:
+            return {"error": f"No parser for {file_type}"}
 
-        if doc_type == "sop":
-            analysis["enhanced_version"] = self._enhance_sop(analysis["text"])
+        return self._generate_analysis(text, doc_type)
 
-        return analysis
+    except Exception as e:
+        logging.exception(f"Document analysis failed")
+        return {"error": f"Analysis failed: {str(e)}"}
+
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
+    """Enhanced text extraction with fallback parsers"""
+    try:
         if doc_type == "pdf":
-            with pdfplumber.open(io.BytesIO(file)) as pdf:
-                return "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+            return self._extract_pdf(file)  # Use new PDF handler
+        elif doc_type == "docx":
+            return self._extract_docx(file)  # Add DOCX support
         elif doc_type in ["jpg", "jpeg", "png"]:
             return pytesseract.image_to_string(Image.open(io.BytesIO(file)))
         elif doc_type == "txt":
             return file.decode("utf-8")
         else:
-            raise ValueError("Unsupported format")
+            raise ValueError(f"Unsupported format: {doc_type}")
+    except Exception as e:
+        logging.error(f"Extraction failed for {doc_type}: {str(e)}")
+        raise
 
     def find_scholarships(self, query: str = None) -> List[Dict]:
         all_scholarships = self._fetch_scholarships()
@@ -259,3 +276,44 @@ Now, answer this user query using the above info where possible:
             except Exception as e:
                 logging.error(f"Failed to parse {feed_url}: {str(e)}")
         return all_scholarships
+
+def _detect_file_type(self, file_bytes: bytes, filename: str) -> str:
+    """Use magic numbers for reliable detection"""
+    mime = magic.from_buffer(file_bytes, mime=True)
+    ext = Path(filename).suffix[1:].lower()
+    
+    type_map = {
+        "application/pdf": "pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "text/plain": "txt"
+    }
+    
+    return type_map.get(mime, ext)  # Fallback to extension
+
+def _extract_pdf(self, file_bytes: bytes) -> str:
+    """PDF with fallback parsers"""
+    try:
+        # Try pdfplumber first
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        if text.strip(): return text
+        
+        # Fallback to PyMuPDF
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc)
+    
+    except Exception as e:
+        raise ValueError(f"PDF extraction failed: {str(e)}")
+
+def _extract_docx(self, file_bytes: bytes) -> str:
+    """DOCX extraction"""
+    try:
+        from docx import Document
+        doc = Document(io.BytesIO(file_bytes))
+        return "\n".join(para.text for para in doc.paragraphs)
+    except Exception as e:
+        raise ValueError(f"DOCX extraction failed: {str(e)}")
+
