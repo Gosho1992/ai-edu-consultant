@@ -21,6 +21,7 @@ import pdfplumber
 import requests
 from bs4 import BeautifulSoup
 import feedparser
+import io
 
 # --- Configuration ---
 load_dotenv()
@@ -95,21 +96,21 @@ class EducationAgent:
         )
 
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-    cache_key = hashlib.md5(prompt.encode()).hexdigest()
+        cache_key = hashlib.md5(prompt.encode()).hexdigest()
 
-    if cache_key in self.cache:
-        self.metrics["cache_hits"] += 1
-        return self.cache[cache_key]
+        if cache_key in self.cache:
+            self.metrics["cache_hits"] += 1
+            return self.cache[cache_key]
 
-    start_time = datetime.now()
+        start_time = datetime.now()
 
-    try:
-        # Inject scholarships from RSS
-        scholarships = self._fetch_scholarships()
-        scholarship_text = "\n".join([
-            f"- {item['title']} ({item['link']})" for item in scholarships
-        ])
-        enhanced_prompt = f"""
+        try:
+            # Inject scholarships from RSS
+            scholarships = self._fetch_scholarships()
+            scholarship_text = "\n".join([
+                f"- {item['title']} ({item['link']})" for item in scholarships
+            ])
+            enhanced_prompt = f"""
 You are a scholarship assistant. Here is a list of current scholarships fetched live:
 
 {scholarship_text}
@@ -118,24 +119,24 @@ Now, answer this user query using the above info where possible:
 {prompt}
 """
 
-        response = self.client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=context or [{"role": "user", "content": enhanced_prompt}],
-            temperature=0.7,
-            max_tokens=1500
-        )
+            response = self.client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=context or [{"role": "user", "content": enhanced_prompt}],
+                temperature=0.7,
+                max_tokens=1500
+            )
 
-        response_time = (datetime.now() - start_time).total_seconds()
-        self.metrics["response_times"].append(response_time)
-        self.metrics["gpt_calls"] += 1
+            response_time = (datetime.now() - start_time).total_seconds()
+            self.metrics["response_times"].append(response_time)
+            self.metrics["gpt_calls"] += 1
 
-        result = response.choices[0].message.content
-        self.cache.set(cache_key, result, expire=24 * 3600)
-        return result
+            result = response.choices[0].message.content
+            self.cache.set(cache_key, result, expire=24 * 3600)
+            return result
 
-    except Exception as e:
-        logging.error(f"Error generating response: {str(e)}")
-        return "Sorry, I encountered an error processing your request. Please try again."
+        except Exception as e:
+            logging.error(f"Error generating response: {str(e)}")
+            return "Sorry, I encountered an error processing your request. Please try again."
 
     def find_universities(self) -> Dict:
         try:
@@ -177,15 +178,15 @@ Now, answer this user query using the above info where possible:
         return analysis
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
-    if doc_type == "pdf":
-        with pdfplumber.open(io.BytesIO(file)) as pdf:
-            return "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
-    elif doc_type in ["jpg", "jpeg", "png"]:
-        return pytesseract.image_to_string(Image.open(io.BytesIO(file)))
-    elif doc_type == "txt":
-        return file.decode("utf-8")
-    else:
-        raise ValueError("Unsupported format")
+        if doc_type == "pdf":
+            with pdfplumber.open(io.BytesIO(file)) as pdf:
+                return "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+        elif doc_type in ["jpg", "jpeg", "png"]:
+            return pytesseract.image_to_string(Image.open(io.BytesIO(file)))
+        elif doc_type == "txt":
+            return file.decode("utf-8")
+        else:
+            raise ValueError("Unsupported format")
 
     def find_scholarships(self, query: str = None) -> List[Dict]:
         all_scholarships = self._fetch_scholarships()
@@ -242,24 +243,19 @@ Now, answer this user query using the above info where possible:
                 "details": str(e)
             }
 
-# --- Supporting Functions ---
-
-def _fetch_scholarships(self) -> List[Dict]:
-    all_scholarships = []
-    for feed_url in self.services["scholarship_feeds"]:
-        try:
-            feed = feedparser.parse(feed_url)
-            all_scholarships.extend([
-                {
-                    "title": entry.title,
-                    "link": entry.link,
-                    "summary": entry.get("summary", "No details available")
-                }
-                for entry in feed.entries[:5]  # Top 5 per feed
-            ])
-        except Exception as e:
-            logging.error(f"Failed to parse {feed_url}: {str(e)}")
-    return all_scholarships
-
-
-
+    def _fetch_scholarships(self) -> List[Dict]:
+        all_scholarships = []
+        for feed_url in self.services["scholarship_feeds"]:
+            try:
+                feed = feedparser.parse(feed_url)
+                all_scholarships.extend([
+                    {
+                        "title": entry.title,
+                        "link": entry.link,
+                        "summary": entry.get("summary", "No details available")
+                    }
+                    for entry in feed.entries[:5]
+                ])
+            except Exception as e:
+                logging.error(f"Failed to parse {feed_url}: {str(e)}")
+        return all_scholarships
