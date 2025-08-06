@@ -40,7 +40,7 @@ class EducationAgent:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.cache = Cache("edubot_cache")
         self.security = SecurityManager()
-        
+
         # Initialize subsystems
         self._init_user_profile()
         self._init_services()
@@ -97,64 +97,64 @@ class EducationAgent:
         )
 
     # --- Core AI Engine ---
-   def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-    """Advanced response generation with hybrid caching"""
-    cache_key = hashlib.md5(prompt.encode()).hexdigest()
-    
-    if cache_key in self.cache:
-        self.metrics["cache_hits"] += 1
-        return self.cache[cache_key]
-    
-    start_time = datetime.now()
-    try:
-        response = self.client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=context or [{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=1500
-        )
-        
-        # Store response time as float seconds for metrics
-        response_time = (datetime.now() - start_time).total_seconds()
-        self.metrics["response_times"].append(response_time)
-        self.metrics["gpt_calls"] += 1
-        
-        result = response.choices[0].message.content
-        self.cache.set(cache_key, result, expire=timedelta(hours=24))
-        return result
-        
-    except Exception as e:
-        logging.error(f"Error generating response: {str(e)}")
-        return "Sorry, I encountered an error processing your request. Please try again."
-        
+    def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
+        """Advanced response generation with hybrid caching"""
+        cache_key = hashlib.md5(prompt.encode()).hexdigest()
+
+        if cache_key in self.cache:
+            self.metrics["cache_hits"] += 1
+            return self.cache[cache_key]
+
+        start_time = datetime.now()
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=context or [{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=1500
+            )
+
+            # Store response time as float seconds for metrics
+            response_time = (datetime.now() - start_time).total_seconds()
+            self.metrics["response_times"].append(response_time)
+            self.metrics["gpt_calls"] += 1
+
+            result = response.choices[0].message.content
+            self.cache.set(cache_key, result, expire=timedelta(hours=24))
+            return result
+
+        except Exception as e:
+            logging.error(f"Error generating response: {str(e)}")
+            return "Sorry, I encountered an error processing your request. Please try again."
+
         self.metrics["gpt_calls"] += 1
         self.metrics["response_times"].append((datetime.now() - start_time).total_seconds())
-        
+
         result = response.choices[0].message.content
         self.cache.set(cache_key, result, expire=timedelta(hours=24))
         return result
 
     # --- University Intelligence ---
     def find_universities(self) -> Dict:
-    """3-tier university discovery system"""
-    try:
-        # 1. Check local database
-        local_results = self._query_local_db()
-        if local_results:
-            return {"source": "local_db", "data": local_results}
-        
-        # 2. Try external APIs
-        api_results = self._query_university_api()
-        if api_results:
-            return {"source": "api", "data": api_results}
-        
-        # 3. GPT-4 fallback
-        gpt_results = self._generate_gpt_recommendations()
-        return {"source": "gpt", "data": gpt_results}
-        
-    except Exception as e:
-        logging.error(f"University search failed: {str(e)}")
-        return {"source": "error", "data": "Unable to fetch university information at this time"}
+        """3-tier university discovery system"""
+        try:
+            # 1. Check local database
+            local_results = self._query_local_db()
+            if local_results:
+                return {"source": "local_db", "data": local_results}
+
+            # 2. Try external APIs
+            api_results = self._query_university_api()
+            if api_results:
+                return {"source": "api", "data": api_results}
+
+            # 3. GPT-4 fallback
+            gpt_results = self._generate_gpt_recommendations()
+            return {"source": "gpt", "data": gpt_results}
+
+        except Exception as e:
+            logging.error(f"University search failed: {str(e)}")
+            return {"source": "error", "data": "Unable to fetch university information at this time"}
 
     def _query_local_db(self) -> Optional[List]:
         """Query optimized local dataset"""
@@ -170,15 +170,15 @@ class EducationAgent:
             "feedback": None,
             "enhanced_version": None
         }
-        
+
         analysis["feedback"] = self.generate_response(
             f"Provide career-focused analysis of this {doc_type}:\n{analysis['text']}\n"
             "Focus on:\n1. Keyword optimization\n2. Structure improvements\n3. ATS compatibility"
         )
-        
+
         if doc_type == "sop":
             analysis["enhanced_version"] = self._enhance_sop(analysis["text"])
-        
+
         return analysis
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
@@ -195,18 +195,18 @@ class EducationAgent:
     def find_scholarships(self, query: str = None) -> List[Dict]:
         """Semantic scholarship matching"""
         all_scholarships = self._fetch_scholarships()
-        
+
         if query:
             query_embed = self.embedding_model.encode(query)
             scholarships_with_scores = []
-            
+
             for scholarship in all_scholarships:
                 title_embed = self.embedding_model.encode(scholarship["title"])
                 score = cosine_similarity([query_embed], [title_embed])[0][0]
                 scholarships_with_scores.append((scholarship, score))
-            
+
             return sorted(scholarships_with_scores, key=lambda x: x[1], reverse=True)[:5]
-        
+
         return all_scholarships[:10]
 
     # --- Proactive Engagement System ---
@@ -219,7 +219,7 @@ class EducationAgent:
         - Target Countries: {self.user['academic']['target_countries']}
         Documents Uploaded: {len(self.user['documents'].keys())}
         """
-        
+
         return self.generate_response(
             "Suggest 3 personalized next steps for this student:\n" + context
         ).split("\n")
@@ -235,24 +235,24 @@ class EducationAgent:
 
     # --- Monitoring Endpoints ---
     def get_metrics(self) -> Dict:
-    """Real-time performance analytics"""
-    try:
-        avg_time = 0.0
-        if self.metrics["response_times"]:
-            avg_time = np.mean(self.metrics["response_times"])
-            
-        return {
-            "gpt_calls": self.metrics["gpt_calls"],
-            "cache_hit_rate": f"{(self.metrics['cache_hits']/max(1, self.metrics['gpt_calls']))*100:.2f}%",
-            "avg_response_time": f"{avg_time:.2f}s",
-            "total_queries": self.user["engagement"]["query_count"]
-        }
-    except Exception as e:
-        logging.error(f"Metrics generation failed: {str(e)}")
-        return {
-            "error": "Metrics temporarily unavailable",
-            "details": str(e)
-        }
+        """Real-time performance analytics"""
+        try:
+            avg_time = 0.0
+            if self.metrics["response_times"]:
+                avg_time = np.mean(self.metrics["response_times"])
+
+            return {
+                "gpt_calls": self.metrics["gpt_calls"],
+                "cache_hit_rate": f"{(self.metrics['cache_hits']/max(1, self.metrics['gpt_calls']))*100:.2f}%",
+                "avg_response_time": f"{avg_time:.2f}s",
+                "total_queries": self.user["engagement"]["query_count"]
+            }
+        except Exception as e:
+            logging.error(f"Metrics generation failed: {str(e)}")
+            return {
+                "error": "Metrics temporarily unavailable",
+                "details": str(e)
+            }
 
 # --- Supporting Functions ---
 
@@ -274,4 +274,3 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
-
