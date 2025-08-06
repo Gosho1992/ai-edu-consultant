@@ -177,13 +177,15 @@ Now, answer this user query using the above info where possible:
         return analysis
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
-        if doc_type == "pdf":
-            with pdfplumber.open(file) as pdf:
-                return "\n".join([page.extract_text() for page in pdf.pages])
-        elif doc_type in ["jpg", "png"]:
-            return pytesseract.image_to_string(Image.open(file))
-        else:
-            raise ValueError("Unsupported format")
+    if doc_type == "pdf":
+        with pdfplumber.open(io.BytesIO(file)) as pdf:
+            return "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+    elif doc_type in ["jpg", "jpeg", "png"]:
+        return pytesseract.image_to_string(Image.open(io.BytesIO(file)))
+    elif doc_type == "txt":
+        return file.decode("utf-8")
+    else:
+        raise ValueError("Unsupported format")
 
     def find_scholarships(self, query: str = None) -> List[Dict]:
         all_scholarships = self._fetch_scholarships()
@@ -258,5 +260,6 @@ def _fetch_scholarships(self) -> List[Dict]:
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
 
 
