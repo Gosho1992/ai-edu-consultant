@@ -1,154 +1,115 @@
 import streamlit as st
-from backend import EducationAgent
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+import requests
+from time import sleep
+from PIL import Image
+import io
+import base64
 
-# --- Set background video from GitHub ---
-def set_video_background_from_github():
-    video_url = "https://raw.githubusercontent.com/Gosho1992/ai-edu-consultant/main/static/backgroundvideo.mp4"
-    video_html = f"""
+def set_image_background_with_fallback(main_url, fallback_url=None, overlay_opacity=0.85):
+    """
+    Robust background image implementation with multiple fallback mechanisms
+    
+    Parameters:
+    - main_url: Primary image URL (GitHub raw content)
+    - fallback_url: Secondary image URL (optional)
+    - overlay_opacity: Transparency of white overlay (0-1)
+    """
+    # Convert opacity to 0-255 range for CSS
+    overlay_alpha = int(overlay_opacity * 255)
+    
+    # Check if main URL is accessible
+    main_image_available = False
+    try:
+        response = requests.head(main_url, timeout=3)
+        if response.status_code == 200:
+            main_image_available = True
+    except:
+        pass
+    
+    # Use fallback if main image unavailable
+    final_url = main_url if main_image_available else (fallback_url or "")
+    
+    # Local fallback image in base64
+    local_fallback = """
+    iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+    """  # 1x1 transparent pixel
+    
+    css = f"""
     <style>
-    #root > div:first-child {{
-        position: relative;
+    /* Main container styling */
+    [data-testid="stAppViewContainer"] > .main {{
+        background-image: url("{final_url}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }}
-    #root > div:first-child::before {{
+    
+    /* Semi-transparent overlay */
+    [data-testid="stAppViewContainer"] > .main::before {{
         content: "";
-        position: fixed;
+        position: absolute;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: -1;
-        background: rgba(255,255,255,0.7);
-    }}
-    #bgVideo {{
-        position: fixed;
         right: 0;
         bottom: 0;
-        min-width: 100%;
-        min-height: 100%;
-        z-index: -2;
-        opacity: 0.3;
+        background-color: rgba(255, 255, 255, {overlay_opacity});
+        z-index: 0;
     }}
-    </style>
-    <video autoplay muted loop id="bgVideo">
-        <source src="{video_url}" type="video/mp4">
-    </video>
-    """
-    st.markdown(video_html, unsafe_allow_html=True)
-
-# --- Google Sheets setup ---
-def init_gsheets():
-    scope = ["https://spreadsheets.google.com/feeds",
-             "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("scholarship-bot.json", scope)
-    client = gspread.authorize(creds)
-    return client.open("EduBot_Users").sheet1
-
-# --- Welcome screen ---
-def show_welcome_screen():
-    welcome_html = """
-    <style>
-    .welcome-container {
-        background: white;
-        border-radius: 20px;
-        padding: 3rem;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        max-width: 600px;
-        margin: 0 auto;
-        text-align: center;
-    }
-    </style>
-    <div class="welcome-container">
-        <h1>🎓 Welcome to EduBot Pro</h1>
-        <p>Your personal AI education consultant</p>
-        <img src="https://i.imgur.com/JDyhW5n.png" width="200">
-    </div>
-    """
-    st.markdown(welcome_html, unsafe_allow_html=True)
     
-    with st.form("user_form"):
-        username = st.text_input("Enter your name to continue")
-        if st.form_submit_button("Start"):
-            if username:
-                sheet = init_gsheets()
-                sheet.append_row([username, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-                st.session_state.username = username
-                st.session_state.welcome_complete = True
-                st.rerun()
-            else:
-                st.warning("Please enter your name")
+    /* Content container */
+    [data-testid="stAppViewContainer"] > .main > div {{
+        background-color: transparent;
+        position: relative;
+        z-index: 1;
+    }}
+    
+    /* Header area */
+    header {{
+        background-color: rgba(255, 255, 255, 0.9) !important;
+    }}
+    
+    /* Fallback if both URLs fail */
+    {"[data-testid=\"stAppViewContainer\"] > .main { background-image: none !important; }" if not final_url else ""}
+    </style>
+    
+    <!-- Local fallback as base64 -->
+    <style id="localFallback">
+    {"[data-testid=\"stAppViewContainer\"] > .main { background-image: url('data:image/png;base64,{local_fallback}') !important; }" if not final_url else ""}
+    </style>
+    """
+    
+    # Preload the image
+    preload = f"""
+    <link rel="preload" href="{final_url}" as="image" onerror="document.getElementById('localFallback').innerHTML = 
+    '[data-testid=\\'stAppViewContainer\\'] > .main {{ background-image: url(\\'data:image/png;base64,{local_fallback}\\') !important; }}';">
+    """ if final_url else ""
+    
+    # Combine all elements
+    st.markdown(css + preload, unsafe_allow_html=True)
 
-# --- MAIN APP ---
 def main():
-    st.set_page_config(page_title="EduBot", page_icon="🎓")
-    set_video_background_from_github()
+    st.set_page_config(
+        page_title="EduBot Pro",
+        page_icon="🎓",
+        layout="wide"
+    )
+    
+    # Set background with multiple fallbacks
+    set_image_background_with_fallback(
+        main_url="https://raw.githubusercontent.com/Gosho1992/ai-edu-consultant/main/static/backgroundimage.png",
+        fallback_url="https://example.com/fallback-image.jpg",
+        overlay_opacity=0.82
+    )
+    
+    # Your app content
+    st.title("🎓 EduBot Pro")
+    st.write("This text will appear clearly over the background")
+    
+    # Test content to verify layering
+    with st.expander("Test Section"):
+        st.write("This should be readable")
+        st.button("Sample Button")
 
-    if not st.session_state.get("welcome_complete"):
-        show_welcome_screen()
-        return
-
-    # Initialize agent
-    if "agent" not in st.session_state:
-        st.session_state.agent = EducationAgent()
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Hi! I'm your education consultant. Tell me about your academic goals."}
-        ]
-
-    # --- Title ---
-    st.title("🎓 EduBot - AI Education Consultant")
-    st.caption("A ChatGPT-like interface for university guidance")
-
-    # --- Sidebar tools ---
-    with st.sidebar:
-        st.header("📁 Document Tools")
-        uploaded_file = st.file_uploader("Upload CV/Transcript", type=["pdf", "png", "jpg", "jpeg"])
-        if uploaded_file:
-            with st.spinner("Analyzing document..."):
-                feedback = st.session_state.agent.analyze_document(
-                    uploaded_file.getvalue(),
-                    uploaded_file.type
-                )
-            st.success("✅ Analysis Complete")
-            st.markdown(f"### Feedback:\n{feedback}")
-
-    # --- Chat history ---
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # --- Chat input ---
-    if prompt := st.chat_input("Ask me about universities, scholarships, or paste a link..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                if "http" in prompt:
-                    response = st.session_state.agent.analyze_scholarship_url(prompt)
-                else:
-                    response = st.session_state.agent.chat(prompt)
-            st.markdown(response)
-
-            if "scholarship" in prompt.lower():
-                st.markdown("""
-                <div style="margin-top: 1rem; font-size: 0.85rem; color: gray;">
-                📌 <em>Scholarship summaries are sourced via public RSS feeds from ScholarshipsCorner and ScholarshipUnion. For complete details, always refer to the original websites.</em>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
-    # --- Smart Application Helper ---
-    if st.session_state.get("last_scholarship"):
-        st.button("🤖 Get help tailoring your application", 
-                  on_click=lambda: st.session_state.messages.append(
-                      {"role": "user", "content": "Help me apply to the last scholarship"}
-                  ))
-
-# Run
 if __name__ == "__main__":
     main()
