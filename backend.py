@@ -131,7 +131,7 @@ class EducationAgent:
         self.metrics["response_times"].append((datetime.now() - start_time).total_seconds())
 
         result = response.choices[0].message.content
-        self.cache.set(cache_key, result, expire=timedelta(hours=24))
+        self.cache.set(cache_key, result, expire=24 * 3600)
         return result
 
     # --- University Intelligence ---
@@ -274,3 +274,4 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
+
