@@ -97,33 +97,29 @@ class EducationAgent:
         )
 
     # --- Core AI Engine ---
-
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-    """Advanced response generation with hybrid caching"""
-    cache_key = hashlib.md5(prompt.encode()).hexdigest()
-    
-    if cache_key in self.cache:
-        self.metrics["cache_hits"] += 1
-        return self.cache[cache_key]
-    
-    start_time = datetime.now()
-    response = self.client.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=context or [{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=1500
-    )
-    
-    self.metrics["gpt_calls"] += 1
-    
-    # Store response time as seconds (float) instead of timedelta
-    response_time_seconds = (datetime.now() - start_time).total_seconds()
-    self.metrics["response_times"].append(response_time_seconds)
-    
-    result = response.choices[0].message.content
-    self.cache.set(cache_key, result, expire=timedelta(hours=24))
-    return result
+        """Advanced response generation with hybrid caching"""
+        cache_key = hashlib.md5(prompt.encode()).hexdigest()
         
+        if cache_key in self.cache:
+            self.metrics["cache_hits"] += 1
+            return self.cache[cache_key]
+        
+        start_time = datetime.now()
+        response = self.client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=context or [{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        self.metrics["gpt_calls"] += 1
+        self.metrics["response_times"].append((datetime.now() - start_time).total_seconds())
+        
+        result = response.choices[0].message.content
+        self.cache.set(cache_key, result, expire=timedelta(hours=24))
+        return result
+
     # --- University Intelligence ---
     def find_universities(self) -> Dict:
         """3-tier university discovery system"""
@@ -247,8 +243,3 @@ def _fetch_scholarships():
         except Exception as e:
             logging.error(f"Failed to parse {feed_url}: {str(e)}")
     return all_scholarships
-
-
-
-
-
