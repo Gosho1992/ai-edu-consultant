@@ -44,17 +44,21 @@ with st.sidebar:
         if st.button("Analyze Document"):
             with st.spinner(f"Analyzing your {doc_type}..."):
                 try:
-                    # Save the file temporarily
-                    with open(f"temp_{doc_type}{file_extension}", "wb") as f:
-                        f.write(uploaded_file.getbuffer())
+                    # Use in-memory processing (no temp files)
+                    file_bytes = uploaded_file.getvalue()
                     
-                    # Analyze using backend
-                    with open(f"temp_{doc_type}{file_extension}", "rb") as f:
-                        analysis = st.session_state.agent.analyze_document(f.read(), uploaded_file.name, doc_type)
+                    # Normalize doc_type for backend
+                    backend_doc_type = "cv" if doc_type == "resume" else doc_type
+                    
+                    analysis = st.session_state.agent.analyze_document(
+                        file_bytes, 
+                        uploaded_file.name, 
+                        backend_doc_type
+                    )
                     
                     # Display results
-                    if "error" in analysis:
-                        st.error(f"❌ {analysis['error']}")
+                    if analysis.get("error"):
+                        st.error(analysis["error"])
                     else:
                         st.subheader("Analysis Results")
                         st.text_area("Extracted Text", analysis["text"], height=200)
@@ -62,9 +66,6 @@ with st.sidebar:
                         
                         if doc_type == "sop" and analysis["enhanced_version"]:
                             st.text_area("Enhanced Version", analysis["enhanced_version"], height=300)
-                    
-                    # Clean up
-                    os.remove(f"temp_{doc_type}{file_extension}")
                     
                 except Exception as e:
                     st.error(f"Error analyzing document: {str(e)}")
