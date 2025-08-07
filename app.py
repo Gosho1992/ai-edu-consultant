@@ -22,53 +22,79 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+
 # Document upload section in sidebar
 with st.sidebar:
     st.header("📄 Document Analysis")
     uploaded_file = st.file_uploader(
         "Upload your documents for analysis",
-        type=["pdf", "txt", "docx", "jpg", "png"],
+        type=["pdf", "txt", "docx", "jpg", "png", "jpeg"],
         accept_multiple_files=False
     )
     
-    if uploaded_file:
+    if uploaded_file is not None:  # Check if file was actually uploaded
         file_extension = os.path.splitext(uploaded_file.name)[1][1:].lower()
-        valid_types = ["cv", "resume", "transcript", "sop"]
+        valid_types = ["cv", "resume", "transcript", "sop", "motivation letter"]
         
         doc_type = st.selectbox(
             "Select document type",
             valid_types,
-            index=0 if "resume" in uploaded_file.name.lower() else 2
+            index=3 if "sop" in uploaded_file.name.lower() else 
+                 0 if "resume" in uploaded_file.name.lower() or "cv" in uploaded_file.name.lower() else
+                 1 if "transcript" in uploaded_file.name.lower() else 3
         )
         
         if st.button("Analyze Document"):
             with st.spinner(f"Analyzing your {doc_type}..."):
                 try:
-                    # Use in-memory processing (no temp files)
-                    file_bytes = uploaded_file.getvalue()
+                    # Read file content directly
+                    file_bytes = uploaded_file.read()
                     
-                    # Normalize doc_type for backend
-                    backend_doc_type = "cv" if doc_type == "resume" else doc_type
+                    # Normalize document type for backend
+                    backend_doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
                     
+                    # Ensure file is not empty
+                    if len(file_bytes) == 0:
+                        st.error("Uploaded file is empty")
+                        st.stop()
+                    
+                    # Call backend analysis
                     analysis = st.session_state.agent.analyze_document(
-                        file_bytes, 
-                        uploaded_file.name, 
-                        backend_doc_type
+                        file_bytes=file_bytes,
+                        filename=uploaded_file.name,
+                        doc_type=backend_doc_type
                     )
                     
-                    # Display results
-                    if analysis.get("error"):
-                        st.error(analysis["error"])
+                    # Check if analysis failed
+                    if not analysis or analysis.get("error"):
+                        error_msg = analysis.get("error", "Unknown error occurred during analysis")
+                        st.error(f"❌ {error_msg}")
                     else:
+                        # Display successful results
                         st.subheader("Analysis Results")
-                        st.text_area("Extracted Text", analysis["text"], height=200)
-                        st.text_area("Feedback", analysis["feedback"], height=200)
                         
-                        if doc_type == "sop" and analysis["enhanced_version"]:
-                            st.text_area("Enhanced Version", analysis["enhanced_version"], height=300)
-                    
+                        if analysis.get("text"):
+                            st.text_area("Extracted Text", 
+                                       value=analysis["text"], 
+                                       height=200,
+                                       key="extracted_text")
+                        
+                        if analysis.get("feedback"):
+                            st.text_area("Feedback", 
+                                        value=analysis["feedback"], 
+                                        height=200,
+                                        key="feedback")
+                        
+                        if backend_doc_type == "sop" and analysis.get("enhanced_version"):
+                            st.text_area("Enhanced Version", 
+                                        value=analysis["enhanced_version"], 
+                                        height=300,
+                                        key="enhanced_version")
+                
                 except Exception as e:
-                    st.error(f"Error analyzing document: {str(e)}")
+                    st.error(f"Analysis failed: {str(e)}")
+                    st.error("Please ensure you've uploaded a valid document file and selected the correct document type.")
+
 
 # Chat input
 if prompt := st.chat_input("Ask me about universities or scholarships..."):
@@ -102,3 +128,4 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
         
     # Add AI response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+
