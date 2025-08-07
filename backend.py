@@ -8,7 +8,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from fastapi import HTTPException, Security
-from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer
@@ -47,33 +46,16 @@ class EducationAgent:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.cache = Cache("edubot_cache")
         self.security = SecurityManager()
-
-        # Initialize subsystems
         self._init_user_profile()
         self._init_services()
         self._setup_monitoring()
 
     def _init_user_profile(self):
         self.user = {
-            "academic": {
-                "degree": None,
-                "field": None,
-                "gpa": None,
-                "target_countries": []
-            },
-            "financial": {
-                "budget": None,
-                "scholarship_needs": True
-            },
-            "documents": {
-                "cv": None,
-                "sop": None,
-                "transcripts": None
-            },
-            "engagement": {
-                "last_active": datetime.now(),
-                "query_count": 0
-            }
+            "academic": {"degree": None, "field": None, "gpa": None, "target_countries": []},
+            "financial": {"budget": None, "scholarship_needs": True},
+            "documents": {"cv": None, "sop": None, "transcripts": None},
+            "engagement": {"last_active": datetime.now(), "query_count": 0}
         }
 
     def _init_services(self):
@@ -86,50 +68,27 @@ class EducationAgent:
                 "universities": "http://universities.hipolabs.com/search",
                 "ranking": "https://edurank.org/api/unis.json"
             },
-            "university_db": []  # placeholder to avoid key error
+            "university_db": []
         }
 
     def _setup_monitoring(self):
-        self.metrics = {
-            "gpt_calls": 0,
-            "cache_hits": 0,
-            "response_times": []
-        }
-        logging.basicConfig(
-            filename='edubot.log',
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s'
-        )
+        self.metrics = {"gpt_calls": 0, "cache_hits": 0, "response_times": []}
+        logging.basicConfig(filename='edubot.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def _get_mime_type(self, file_bytes: bytes) -> str:
-        """Get MIME type using magic"""
         return magic.from_buffer(file_bytes, mime=True)
 
     def analyze_url(self, url: str) -> Dict:
-        """Analyze webpage content using content_analyzer module"""
         try:
             text = analyze_url_content(url)
             if text.startswith("Error analyzing URL"):
-                return {
-                    "text": "",
-                    "source": url,
-                    "error": text
-                }
-            return {
-                "text": text,
-                "source": url,
-                "error": ""
-            }
+                return {"text": "", "source": url, "error": text}
+            return {"text": text, "source": url, "error": ""}
         except Exception as e:
-            return {
-                "text": "",
-                "source": url,
-                "error": f"❌ URL analysis failed: {str(e)}"
-            }
+            return {"text": "", "source": url, "error": f"❌ URL analysis failed: {str(e)}"}
 
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
-
         if cache_key in self.cache:
             self.metrics["cache_hits"] += 1
             return self.cache[cache_key]
@@ -137,11 +96,8 @@ class EducationAgent:
         start_time = datetime.now()
 
         try:
-            # Inject scholarships from RSS
             scholarships = self._fetch_scholarships()
-            scholarship_text = "\n".join([
-                f"- {item['title']} ({item['link']})" for item in scholarships
-            ])
+            scholarship_text = "\n".join([f"- {item['title']} ({item['link']})" for item in scholarships])
             enhanced_prompt = f"""
 You are a scholarship assistant. Here is a list of current scholarships fetched live:
 
@@ -150,22 +106,18 @@ You are a scholarship assistant. Here is a list of current scholarships fetched 
 Now, answer this user query using the above info where possible:
 {prompt}
 """
-
             response = self.client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=context or [{"role": "user", "content": enhanced_prompt}],
                 temperature=0.7,
                 max_tokens=1500
             )
-
             response_time = (datetime.now() - start_time).total_seconds()
             self.metrics["response_times"].append(response_time)
             self.metrics["gpt_calls"] += 1
-
             result = response.choices[0].message.content
             self.cache.set(cache_key, result, expire=24 * 3600)
             return result
-
         except Exception as e:
             logging.error(f"Error generating response: {str(e)}")
             return "Sorry, I encountered an error processing your request. Please try again."
@@ -175,14 +127,11 @@ Now, answer this user query using the above info where possible:
             local_results = self._query_local_db()
             if local_results:
                 return {"source": "local_db", "data": local_results}
-
             api_results = self._query_university_api()
             if api_results:
                 return {"source": "api", "data": api_results}
-
             gpt_results = self._generate_gpt_recommendations()
             return {"source": "gpt", "data": gpt_results}
-
         except Exception as e:
             logging.error(f"University search failed: {str(e)}")
             return {"source": "error", "data": "Unable to fetch university information at this time"}
@@ -193,14 +142,12 @@ Now, answer this user query using the above info where possible:
                 and self.user["academic"]["field"].lower() in uni["programs"]]
 
     def _extract_image(self, file_bytes: bytes) -> str:
-        """Now handled by parse_uploaded_file"""
         return parse_uploaded_file(file_bytes, "image/png")
 
     def _detect_file_type(self, file_bytes: bytes, filename: str) -> str:
         try:
             mime = magic.from_buffer(file_bytes, mime=True)
             ext = Path(filename).suffix[1:].lower()
-
             type_map = {
                 "application/pdf": "pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -215,43 +162,25 @@ Now, answer this user query using the above info where possible:
 
     def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
         try:
-            # Normalize document types
             doc_type = doc_type.lower()
             if doc_type == "resume":
                 doc_type = "cv"
-                
             file_type = self._detect_file_type(file_bytes, filename)
             if not self._is_supported(file_type, doc_type):
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"
-                }
-
-            # Use the parse_uploaded_file module
+                return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"}
             text = parse_uploaded_file(file_bytes, self._get_mime_type(file_bytes))
-            
             analysis = self._generate_analysis(text, doc_type)
-
             return {
                 "text": analysis.get("text", text),
                 "feedback": analysis.get("feedback", ""),
                 "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
                 "error": ""
             }
-
         except Exception as e:
             logging.exception("⚠️ Document analysis failed")
-            return {
-                "text": "",
-                "feedback": "",
-                "enhanced_version": "",
-                "error": f"❌ Analysis failed: {str(e)}"
-            }
+            return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Analysis failed: {str(e)}"}
 
     def _extract_pdf(self, file_bytes: bytes) -> str:
-        """Now handled by parse_uploaded_file"""
         return parse_uploaded_file(file_bytes, "application/pdf")
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
@@ -272,38 +201,28 @@ Now, answer this user query using the above info where possible:
 
     def find_scholarships(self, query: str = None) -> List[Dict]:
         all_scholarships = self._fetch_scholarships()
-
         if query:
             query_embed = self.embedding_model.encode(query)
             scholarships_with_scores = []
-
             for scholarship in all_scholarships:
                 title_embed = self.embedding_model.encode(scholarship["title"])
                 score = cosine_similarity([query_embed], [title_embed])[0][0]
                 scholarships_with_scores.append((scholarship, score))
-
             return sorted(scholarships_with_scores, key=lambda x: x[1], reverse=True)[:5]
-
         return all_scholarships[:10]
 
     def suggest_next_steps(self) -> List[str]:
         context = f"""
-        User Profile:
-        - Degree: {self.user['academic']['degree']}
-        - Field: {self.user['academic']['field']}
-        - Target Countries: {self.user['academic']['target_countries']}
-        Documents Uploaded: {len(self.user['documents'].keys())}
-        """
-
-        return self.generate_response(
-            "Suggest 3 personalized next steps for this student:\n" + context
-        ).split("\n")
+User Profile:
+- Degree: {self.user['academic']['degree']}
+- Field: {self.user['academic']['field']}
+- Target Countries: {self.user['academic']['target_countries']}
+Documents Uploaded: {len(self.user['documents'].keys())}
+"""
+        return self.generate_response("Suggest 3 personalized next steps for this student:\n" + context).split("\n")
 
     def validate_input(self, text: str) -> bool:
-        blacklist = [
-            "ignore previous", "###", "system prompt",
-            "as an AI", "your instructions"
-        ]
+        blacklist = ["ignore previous", "###", "system prompt", "as an AI", "your instructions"]
         return not any(phrase in text.lower() for phrase in blacklist)
 
     def get_metrics(self) -> Dict:
@@ -311,7 +230,6 @@ Now, answer this user query using the above info where possible:
             avg_time = 0.0
             if self.metrics["response_times"]:
                 avg_time = np.mean(self.metrics["response_times"])
-
             return {
                 "gpt_calls": self.metrics["gpt_calls"],
                 "cache_hit_rate": f"{(self.metrics['cache_hits']/max(1, self.metrics['gpt_calls']))*100:.2f}%",
@@ -320,10 +238,7 @@ Now, answer this user query using the above info where possible:
             }
         except Exception as e:
             logging.error(f"Metrics generation failed: {str(e)}")
-            return {
-                "error": "Metrics temporarily unavailable",
-                "details": str(e)
-            }
+            return {"error": "Metrics temporarily unavailable", "details": str(e)}
 
     def _fetch_scholarships(self) -> List[Dict]:
         all_scholarships = []
@@ -331,11 +246,7 @@ Now, answer this user query using the above info where possible:
             try:
                 feed = feedparser.parse(feed_url)
                 all_scholarships.extend([
-                    {
-                        "title": entry.title,
-                        "link": entry.link,
-                        "summary": entry.get("summary", "No details available")
-                    }
+                    {"title": entry.title, "link": entry.link, "summary": entry.get("summary", "No details available")}
                     for entry in feed.entries[:5]
                 ])
             except Exception as e:
@@ -359,18 +270,14 @@ Now, answer this user query using the above info where possible:
         return file_type in supported_types.get(doc_type.lower(), set())
 
     def _generate_analysis(self, text: str, doc_type: str) -> Dict:
-    # TEMPORARY MOCK ANALYSIS – Replace with real logic later
-    return {
-        "text": text.strip()[:1000],  # Show first 1000 characters
-        "feedback": f"✅ Document of type '{doc_type}' processed. Looks good!",
-        "enhanced_version": text.strip().upper() if doc_type == "sop" else ""
-    }
+        return {
+            "text": text.strip()[:1000],
+            "feedback": f"✅ Document of type '{doc_type}' processed. Looks good!",
+            "enhanced_version": text.strip().upper() if doc_type == "sop" else ""
+        }
 
     def _query_university_api(self) -> List[Dict]:
-        # Existing implementation remains unchanged
         pass
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
-        # Existing implementation remains unchanged
         pass
-
