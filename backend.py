@@ -26,6 +26,9 @@ import magic
 from typing import Dict, Union
 from pathlib import Path
 
+from parse_uploaded_file import parse_uploaded_file
+from content_analyzer import analyze_url_content
+
 # --- Configuration ---
 load_dotenv()
 API_KEY_NAME = "X-API-KEY"
@@ -98,6 +101,32 @@ class EducationAgent:
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
 
+    def _get_mime_type(self, file_bytes: bytes) -> str:
+        """Get MIME type using magic"""
+        return magic.from_buffer(file_bytes, mime=True)
+
+    def analyze_url(self, url: str) -> Dict:
+        """Analyze webpage content using content_analyzer module"""
+        try:
+            text = analyze_url_content(url)
+            if text.startswith("Error analyzing URL"):
+                return {
+                    "text": "",
+                    "source": url,
+                    "error": text
+                }
+            return {
+                "text": text,
+                "source": url,
+                "error": ""
+            }
+        except Exception as e:
+            return {
+                "text": "",
+                "source": url,
+                "error": f"❌ URL analysis failed: {str(e)}"
+            }
+
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
 
@@ -164,10 +193,8 @@ Now, answer this user query using the above info where possible:
                 and self.user["academic"]["field"].lower() in uni["programs"]]
 
     def _extract_image(self, file_bytes: bytes) -> str:
-        try:
-            return pytesseract.image_to_string(Image.open(io.BytesIO(file_bytes)))
-        except Exception as e:
-            raise ValueError(f"Image processing failed: {str(e)}")
+        """Now handled by parse_uploaded_file"""
+        return parse_uploaded_file(file_bytes, "image/png")
 
     def _detect_file_type(self, file_bytes: bytes, filename: str) -> str:
         try:
@@ -202,21 +229,9 @@ Now, answer this user query using the above info where possible:
                     "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"
                 }
 
-            # Unified extraction logic
-            if file_type == "pdf":
-                text = self._extract_pdf(file_bytes)
-            elif file_type == "docx":
-                text = self._extract_docx(file_bytes)
-            elif file_type in ("jpg", "jpeg", "png"):
-                text = self._extract_image(file_bytes)
-            else:
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": f"❌ No parser available for {file_type} files"
-                }
-
+            # Use the parse_uploaded_file module
+            text = parse_uploaded_file(file_bytes, self._get_mime_type(file_bytes))
+            
             analysis = self._generate_analysis(text, doc_type)
 
             return {
@@ -234,6 +249,10 @@ Now, answer this user query using the above info where possible:
                 "enhanced_version": "",
                 "error": f"❌ Analysis failed: {str(e)}"
             }
+
+    def _extract_pdf(self, file_bytes: bytes) -> str:
+        """Now handled by parse_uploaded_file"""
+        return parse_uploaded_file(file_bytes, "application/pdf")
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
         try:
@@ -322,20 +341,6 @@ Now, answer this user query using the above info where possible:
             except Exception as e:
                 logging.error(f"Failed to parse {feed_url}: {str(e)}")
         return all_scholarships
-
-    def _extract_pdf(self, file_bytes: bytes) -> str:
-        try:
-            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-            if text.strip():
-                return text
-
-            import fitz
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            return "\n".join(page.get_text() for page in doc)
-
-        except Exception as e:
-            raise ValueError(f"PDF extraction failed: {str(e)}")
 
     def _extract_docx(self, file_bytes: bytes) -> str:
         try:
