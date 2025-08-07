@@ -50,7 +50,7 @@ with st.sidebar:
                     
                     # Analyze using backend
                     with open(f"temp_{doc_type}{file_extension}", "rb") as f:
-                        analysis = st.session_state.agent.analyze_document(f.read(), doc_type)
+                        analysis = st.session_state.agent.analyze_document(f.read(), uploaded_file.name, doc_type)
                     
                     # Display results
                     st.subheader("Analysis Results")
@@ -98,3 +98,4 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
         
     # Add AI response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+
