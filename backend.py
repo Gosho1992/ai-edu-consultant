@@ -270,11 +270,51 @@ Documents Uploaded: {len(self.user['documents'].keys())}
         return file_type in supported_types.get(doc_type.lower(), set())
 
     def _generate_analysis(self, text: str, doc_type: str) -> Dict:
-        return {
-            "text": text.strip()[:1000],
-            "feedback": f"✅ Document of type '{doc_type}' processed. Looks good!",
-            "enhanced_version": text.strip().upper() if doc_type == "sop" else ""
-        }
+        try:
+            import tiktoken
+            from openai import OpenAI
+
+            max_chars = 3000 if doc_type in ["sop", "resume", "cv"] else 1000
+            text = text.strip()[:max_chars]
+
+            system_msg = f"You are a helpful assistant reviewing a {doc_type}. Provide feedback and improve it."
+            user_msg = f"Here is the extracted text of the {doc_type}:\n\n{text}\n\nPlease provide:\n1. A short feedback for improvement.\n2. A rewritten professional version of it."
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            completion = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
+                temperature=0.7,
+                max_tokens=800
+            )
+
+            ai_output = completion.choices[0].message.content
+
+            if "2." in ai_output:
+                feedback_part, enhanced_part = ai_output.split("2.", 1)
+                feedback = feedback_part.replace("1.", "").strip()
+                enhanced = enhanced_part.strip()
+            else:
+                feedback = "Could not separate feedback and rewrite."
+                enhanced = ai_output
+
+            return {
+                "text": text,
+                "feedback": feedback,
+                "enhanced_version": enhanced
+            }
+
+        except Exception as e:
+            logging.exception("Error in _generate_analysis")
+            return {
+                "text": text,
+                "feedback": "Analysis failed.",
+                "enhanced_version": None,
+                "error": str(e)
+            }
 
     def _query_university_api(self) -> List[Dict]:
         pass
