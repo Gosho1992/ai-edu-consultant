@@ -164,26 +164,49 @@ Now, answer this user query using the above info where possible:
                 and self.user["academic"]["field"].lower() in uni["programs"]]
 
     def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
-        """Robust document analysis with format detection"""
-        try:
-            file_type = self._detect_file_type(file_bytes, filename)
-            if not self._is_supported(file_type, doc_type):
-                return {"error": f"Unsupported {file_type} for {doc_type} analysis"}
+    """Robust document analysis with format detection"""
+    try:
+        file_type = self._detect_file_type(file_bytes, filename)
+        if not self._is_supported(file_type, doc_type):
+            return {
+                "text": "",
+                "feedback": "",
+                "enhanced_version": "",
+                "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"
+            }
 
-            if file_type == "pdf":
-                text = self._extract_pdf(file_bytes)
-            elif file_type == "docx":
-                text = self._extract_docx(file_bytes)
-            elif file_type in ("jpg", "png"):
-                text = self._extract_image(file_bytes)
-            else:
-                return {"error": f"No parser for {file_type}"}
+        if file_type == "pdf":
+            text = self._extract_pdf(file_bytes)
+        elif file_type == "docx":
+            text = self._extract_docx(file_bytes)
+        elif file_type in ("jpg", "jpeg", "png"):
+            text = self._extract_image(file_bytes)
+        else:
+            return {
+                "text": "",
+                "feedback": "",
+                "enhanced_version": "",
+                "error": f"❌ No parser available for {file_type} files"
+            }
 
-            return self._generate_analysis(text, doc_type)
+        analysis = self._generate_analysis(text, doc_type)
 
-        except Exception as e:
-            logging.exception(f"Document analysis failed")
-            return {"error": f"Analysis failed: {str(e)}"}
+        return {
+            "text": analysis.get("text", text),
+            "feedback": analysis.get("feedback", ""),
+            "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
+            "error": ""
+        }
+
+    except Exception as e:
+        logging.exception("⚠️ Document analysis failed")
+        return {
+            "text": "",
+            "feedback": "",
+            "enhanced_version": "",
+            "error": f"❌ Analysis failed: {str(e)}"
+        }
+
 
     def _extract_text(self, file: bytes, doc_type: str) -> str:
         """Enhanced text extraction with fallback parsers"""
@@ -273,20 +296,34 @@ Now, answer this user query using the above info where possible:
             except Exception as e:
                 logging.error(f"Failed to parse {feed_url}: {str(e)}")
         return all_scholarships
-
+        
 def _detect_file_type(self, file_bytes: bytes, filename: str) -> str:
-    mime = magic.from_buffer(file_bytes, mime=True)
-    ext = Path(filename).suffix[1:].lower()
+    try:
+        mime = magic.from_buffer(file_bytes, mime=True)
+        ext = Path(filename).suffix[1:].lower()
 
-    type_map = {
-        "application/pdf": "pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-        "image/jpeg": "jpg",
-        "image/png": "png",
-        "text/plain": "txt"
+        type_map = {
+            "application/pdf": "pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "text/plain": "txt"
+        }
+
+        # Prefer MIME detection; fallback to extension
+        return type_map.get(mime, ext)
+    except Exception as e:
+        logging.error(f"Failed to detect file type: {str(e)}")
+        return Path(filename).suffix[1:].lower()
+
+def _is_supported(self, file_type: str, doc_type: str) -> bool:
+    supported_types = {
+        "sop": {"pdf", "docx", "jpg", "png"},
+        "cv": {"pdf", "docx"},
+        "transcript": {"pdf", "jpg", "png"}
     }
+    return file_type in supported_types.get(doc_type.lower(), set())
 
-    return type_map.get(mime, ext)
 
 def _extract_pdf(self, file_bytes: bytes) -> str:
     try:
@@ -309,3 +346,4 @@ def _extract_docx(self, file_bytes: bytes) -> str:
         return "\n".join(para.text for para in doc.paragraphs)
     except Exception as e:
         raise ValueError(f"DOCX extraction failed: {str(e)}")
+
