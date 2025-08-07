@@ -78,6 +78,13 @@ class EducationAgent:
     def _get_mime_type(self, file_bytes: bytes) -> str:
         return magic.from_buffer(file_bytes, mime=True)
 
+    def _validate_file(self, file_bytes: bytes) -> bool:
+        if not file_bytes:
+            return False
+        if len(file_bytes) > 200 * 1024 * 1024:
+            return False
+        return True
+
     def analyze_url(self, url: str) -> Dict:
         try:
             text = analyze_url_content(url)
@@ -86,6 +93,56 @@ class EducationAgent:
             return {"text": text, "source": url, "error": ""}
         except Exception as e:
             return {"text": "", "source": url, "error": f"❌ URL analysis failed: {str(e)}"}
+
+    def _detect_file_type(self, file_bytes: bytes, filename: str) -> str:
+        try:
+            mime = magic.from_buffer(file_bytes, mime=True)
+            ext = Path(filename).suffix[1:].lower()
+            type_map = {
+                "application/pdf": "pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+                "application/msword": "doc",
+                "image/jpeg": "jpg",
+                "image/png": "png",
+                "text/plain": "txt",
+                "application/rtf": "rtf"
+            }
+            return type_map.get(mime, ext if ext else "unknown")
+        except Exception as e:
+            logging.error(f"File type detection failed: {str(e)}")
+            return Path(filename).suffix[1:].lower() or "unknown"
+
+    def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
+        try:
+            logging.debug(f"Analyzing document: {filename}, type: {doc_type}")
+
+            if not self._validate_file(file_bytes):
+                raise ValueError("Invalid or empty file provided")
+
+            file_type = self._detect_file_type(file_bytes, filename)
+            logging.debug(f"Detected file type: {file_type}")
+
+            if doc_type.lower() == "resume":
+                doc_type = "cv"
+
+            if not self._is_supported(file_type, doc_type):
+                return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"}
+
+            text = parse_uploaded_file(file_bytes, self._get_mime_type(file_bytes))
+            analysis = self._generate_analysis(text, doc_type)
+
+            return {
+                "text": analysis.get("text", text),
+                "feedback": analysis.get("feedback", ""),
+                "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
+                "error": ""
+            }
+        except Exception as e:
+            logging.exception(f"Document analysis failed for {filename}: {str(e)}")
+            return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Analysis failed: {str(e)}"}
+
+    # The rest of the original class remains unchanged...
+
 
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
@@ -321,3 +378,4 @@ Documents Uploaded: {len(self.user['documents'].keys())}
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
         pass
+
