@@ -359,8 +359,12 @@ Now, answer this user query using the above info where possible:
         return file_type in supported_types.get(doc_type.lower(), set())
 
     def _generate_analysis(self, text: str, doc_type: str) -> Dict:
-        # Existing implementation remains unchanged
-        pass
+    # TEMPORARY MOCK ANALYSIS – Replace with real logic later
+    return {
+        "text": text.strip()[:1000],  # Show first 1000 characters
+        "feedback": f"✅ Document of type '{doc_type}' processed. Looks good!",
+        "enhanced_version": text.strip().upper() if doc_type == "sop" else ""
+    }
 
     def _query_university_api(self) -> List[Dict]:
         # Existing implementation remains unchanged
@@ -369,3 +373,4 @@ Now, answer this user query using the above info where possible:
     def _generate_gpt_recommendations(self) -> List[Dict]:
         # Existing implementation remains unchanged
         pass
+
