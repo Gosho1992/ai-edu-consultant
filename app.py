@@ -55,14 +55,13 @@ with st.sidebar:
                     # Display results
                     if "error" in analysis:
                         st.error(f"❌ {analysis['error']}")
-
                     else:
                         st.subheader("Analysis Results")
                         st.text_area("Extracted Text", analysis["text"], height=200)
                         st.text_area("Feedback", analysis["feedback"], height=200)
                         
                         if doc_type == "sop" and analysis["enhanced_version"]:
-                        st.text_area("Enhanced Version", analysis["enhanced_version"], height=300)
+                            st.text_area("Enhanced Version", analysis["enhanced_version"], height=300)
                     
                     # Clean up
                     os.remove(f"temp_{doc_type}{file_extension}")
@@ -102,5 +101,3 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
         
     # Add AI response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
-
-
