@@ -141,43 +141,43 @@ class EducationAgent:
             logging.exception(f"Document analysis failed for {filename}: {str(e)}")
             return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Analysis failed: {str(e)}"}
 
-    # The rest of the original class remains unchanged...
-
-
-    def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
-        cache_key = hashlib.md5(prompt.encode()).hexdigest()
-        if cache_key in self.cache:
-            self.metrics["cache_hits"] += 1
-            return self.cache[cache_key]
-
-        start_time = datetime.now()
-
+    def _generate_analysis(self, text: str, doc_type: str) -> Dict:
         try:
-            scholarships = self._fetch_scholarships()
-            scholarship_text = "\n".join([f"- {item['title']} ({item['link']})" for item in scholarships])
-            enhanced_prompt = f"""
-You are a scholarship assistant. Here is a list of current scholarships fetched live:
+            import tiktoken
+            enc = tiktoken.encoding_for_model("gpt-4")
+            tokens = enc.encode(text)
+            if len(tokens) > 1500:
+                text = enc.decode(tokens[:1500])
 
-{scholarship_text}
+            system_msg = f"You are a helpful assistant reviewing a {doc_type}. Provide feedback and improve it."
+            user_msg = f"Return JSON with 'feedback' and 'enhanced_version'. Here is the text:\n{text}"
 
-Now, answer this user query using the above info where possible:
-{prompt}
-"""
-            response = self.client.chat.completions.create(
+            completion = self.client.chat.completions.create(
                 model="gpt-4-turbo",
-                messages=context or [{"role": "user", "content": enhanced_prompt}],
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
                 temperature=0.7,
-                max_tokens=1500
+                max_tokens=800
             )
-            response_time = (datetime.now() - start_time).total_seconds()
-            self.metrics["response_times"].append(response_time)
-            self.metrics["gpt_calls"] += 1
-            result = response.choices[0].message.content
-            self.cache.set(cache_key, result, expire=24 * 3600)
-            return result
+
+            data = json.loads(completion.choices[0].message.content)
+            return {
+                "text": text,
+                "feedback": data.get("feedback", ""),
+                "enhanced_version": data.get("enhanced_version", "")
+            }
+
         except Exception as e:
-            logging.error(f"Error generating response: {str(e)}")
-            return "Sorry, I encountered an error processing your request. Please try again."
+            logging.exception("Error in _generate_analysis")
+            return {
+                "text": text,
+                "feedback": "Analysis failed.",
+                "enhanced_version": None,
+                "error": str(e)
+            }
 
     def find_universities(self) -> Dict:
         try:
@@ -216,26 +216,6 @@ Now, answer this user query using the above info where possible:
             return type_map.get(mime, ext)
         except:
             return Path(filename).suffix[1:].lower()
-
-    def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
-        try:
-            doc_type = doc_type.lower()
-            if doc_type == "resume":
-                doc_type = "cv"
-            file_type = self._detect_file_type(file_bytes, filename)
-            if not self._is_supported(file_type, doc_type):
-                return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"}
-            text = parse_uploaded_file(file_bytes, self._get_mime_type(file_bytes))
-            analysis = self._generate_analysis(text, doc_type)
-            return {
-                "text": analysis.get("text", text),
-                "feedback": analysis.get("feedback", ""),
-                "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
-                "error": ""
-            }
-        except Exception as e:
-            logging.exception("⚠️ Document analysis failed")
-            return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Analysis failed: {str(e)}"}
 
     def _extract_pdf(self, file_bytes: bytes) -> str:
         return parse_uploaded_file(file_bytes, "application/pdf")
@@ -378,4 +358,5 @@ Documents Uploaded: {len(self.user['documents'].keys())}
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
         pass
+
 
