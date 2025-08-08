@@ -22,7 +22,6 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-
 # Document upload section in sidebar
 with st.sidebar:
     st.header("📄 Document Analysis")
@@ -32,7 +31,7 @@ with st.sidebar:
         accept_multiple_files=False
     )
     
-    if uploaded_file is not None:  # Check if file was actually uploaded
+    if uploaded_file is not None:
         file_extension = os.path.splitext(uploaded_file.name)[1][1:].lower()
         valid_types = ["cv", "resume", "transcript", "sop", "motivation letter"]
         
@@ -47,30 +46,22 @@ with st.sidebar:
         if st.button("Analyze Document"):
             with st.spinner(f"Analyzing your {doc_type}..."):
                 try:
-                    # Read file content directly
                     file_bytes = uploaded_file.read()
                     
-                    # Normalize document type for backend
-                    backend_doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
-                    
-                    # Ensure file is not empty
                     if len(file_bytes) == 0:
                         st.error("Uploaded file is empty")
                         st.stop()
                     
-                    # Call backend analysis
+                    backend_doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
                     analysis = st.session_state.agent.analyze_document(
                         file_bytes=file_bytes,
                         filename=uploaded_file.name,
                         doc_type=backend_doc_type
                     )
                     
-                    # Check if analysis failed
-                    if not analysis or analysis.get("error"):
-                        error_msg = analysis.get("error", "Unknown error occurred during analysis")
-                        st.error(f"❌ {error_msg}")
+                    if analysis.get("error"):
+                        st.error(analysis["error"])
                     else:
-                        # Display successful results
                         st.subheader("Analysis Results")
                         
                         if analysis.get("text"):
@@ -93,26 +84,21 @@ with st.sidebar:
                 
                 except Exception as e:
                     st.error(f"Analysis failed: {str(e)}")
-                    st.error("Please ensure you've uploaded a valid document file and selected the correct document type.")
-
+                    st.error("Please ensure you've uploaded a valid document file.")
 
 # Chat input
 if prompt := st.chat_input("Ask me about universities or scholarships..."):
-    # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # Display user message
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Get AI response - CHANGED FROM chat() TO generate_response()
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 response = st.session_state.agent.generate_response(prompt)
                 st.markdown(response)
                 
-                # 👇 Optional footer for scholarship answers
                 if "scholarship" in prompt.lower():
                     st.markdown(
                         """
@@ -126,6 +112,4 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 st.error(f"Error generating response: {str(e)}")
                 response = "Sorry, I encountered an error. Please try again."
         
-    # Add AI response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
-
