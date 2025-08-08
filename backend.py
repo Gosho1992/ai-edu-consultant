@@ -1,5 +1,6 @@
 from fastapi.security import APIKeyHeader
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+from parse_uploaded_file import parse_uploaded_file
 
 import os
 import json
@@ -403,6 +404,7 @@ Documents Uploaded: {len(self.user['documents'].keys())}
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
         pass
+
 
 
 
