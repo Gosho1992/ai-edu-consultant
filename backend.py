@@ -24,9 +24,13 @@ import io
 import magic
 from typing import Dict, Union
 from pathlib import Path
+from docx import Document
 
-from parse_uploaded_file import parse_uploaded_file
-from content_analyzer import analyze_url_content
+# Configure Tesseract path
+if os.name == 'nt':  # Windows
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+else:  # Linux/Mac
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 # --- Configuration ---
 load_dotenv()
@@ -87,9 +91,9 @@ class EducationAgent:
 
     def analyze_url(self, url: str) -> Dict:
         try:
-            text = analyze_url_content(url)
-            if text.startswith("Error analyzing URL"):
-                return {"text": "", "source": url, "error": text}
+            response = requests.get(url, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            text = ' '.join([p.get_text() for p in soup.find_all('p')])
             return {"text": text, "source": url, "error": ""}
         except Exception as e:
             return {"text": "", "source": url, "error": f"❌ URL analysis failed: {str(e)}"}
@@ -101,83 +105,124 @@ class EducationAgent:
             type_map = {
                 "application/pdf": "pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-                "application/msword": "doc",
                 "image/jpeg": "jpg",
+                "image/jpg": "jpg",
                 "image/png": "png",
-                "text/plain": "txt",
-                "application/rtf": "rtf"
+                "text/plain": "txt"
             }
-            return type_map.get(mime, ext if ext else "unknown")
+            return type_map.get(mime, ext)
         except Exception as e:
             logging.error(f"File type detection failed: {str(e)}")
-            return Path(filename).suffix[1:].lower() or "unknown"
+            return Path(filename).suffix[1:].lower()
+
+    def _extract_pdf(self, file_bytes: bytes) -> str:
+        try:
+            text = ""
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() + "\n"
+            return text.strip()
+        except Exception as e:
+            logging.error(f"PDF extraction failed: {str(e)}")
+            raise
+
+    def _extract_docx(self, file_bytes: bytes) -> str:
+        try:
+            doc = Document(io.BytesIO(file_bytes))
+            return "\n".join(para.text for para in doc.paragraphs)
+        except Exception as e:
+            logging.error(f"DOCX extraction failed: {str(e)}")
+            raise
+
+    def _is_supported(self, file_type: str, doc_type: str) -> bool:
+        supported_types = {
+            "sop": {"pdf", "docx", "jpg", "png"},
+            "cv": {"pdf", "docx"},
+            "transcript": {"pdf", "jpg", "png"}
+        }
+        return file_type in supported_types.get(doc_type.lower(), set())
 
     def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
         try:
-            logging.debug(f"Analyzing document: {filename}, type: {doc_type}")
+            logging.info(f"Analyzing document: {filename}, type: {doc_type}")
 
+            # Validate file
             if not self._validate_file(file_bytes):
-                raise ValueError("Invalid or empty file provided")
+                return {"error": "❌ Invalid file (empty or >200MB)"}
 
+            # Detect file type
             file_type = self._detect_file_type(file_bytes, filename)
-            logging.debug(f"Detected file type: {file_type}")
+            logging.info(f"Detected file type: {file_type} for {filename}")
 
-            if doc_type.lower() == "resume":
-                doc_type = "cv"
-
+            # Normalize doc type
+            doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
+            
+            # Check support
             if not self._is_supported(file_type, doc_type):
-                return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Unsupported {file_type} format for {doc_type} analysis"}
+                return {"error": f"❌ Unsupported {file_type} format for {doc_type}"}
 
-            text = parse_uploaded_file(file_bytes, self._get_mime_type(file_bytes))
-            analysis = self._generate_analysis(text, doc_type)
+            # Extract text based on file type
+            if file_type == "pdf":
+                text = self._extract_pdf(file_bytes)
+            elif file_type == "docx":
+                text = self._extract_docx(file_bytes)
+            elif file_type in ["jpg", "jpeg", "png"]:
+                text = pytesseract.image_to_string(Image.open(io.BytesIO(file_bytes)))
+            elif file_type == "txt":
+                text = file_bytes.decode("utf-8")
+            else:
+                return {"error": f"❌ Unsupported file type: {file_type}"}
+            
+            if not text.strip():
+                return {"error": "❌ Extracted text is empty"}
 
-            return {
-                "text": analysis.get("text", text),
-                "feedback": analysis.get("feedback", ""),
-                "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
-                "error": ""
-            }
+            # Generate analysis
+            return self._generate_analysis(text, doc_type)
+
         except Exception as e:
-            logging.exception(f"Document analysis failed for {filename}: {str(e)}")
-            return {"text": "", "feedback": "", "enhanced_version": "", "error": f"❌ Analysis failed: {str(e)}"}
+            logging.exception(f"Document analysis failed: {str(e)}")
+            return {"error": f"❌ Analysis failed: {str(e)}"}
 
     def _generate_analysis(self, text: str, doc_type: str) -> Dict:
         try:
-            import tiktoken
-            enc = tiktoken.encoding_for_model("gpt-4")
-            tokens = enc.encode(text)
-            if len(tokens) > 1500:
-                text = enc.decode(tokens[:1500])
+            # Truncate text intelligently
+            max_chars = 3000 if doc_type in ["sop", "cv"] else 1000
+            text = text[:max_chars].strip() + "..." if len(text) > max_chars else text
 
-            system_msg = f"You are a helpful assistant reviewing a {doc_type}. Provide feedback and improve it."
-            user_msg = f"Return JSON with 'feedback' and 'enhanced_version'. Here is the text:\n{text}"
-
-            completion = self.client.chat.completions.create(
+            # Prepare for GPT processing
+            system_msg = f"Provide feedback and improvements for this {doc_type} in JSON format"
+            user_msg = json.dumps({"text": text})
+            
+            # Call OpenAI API
+            response = self.client.chat.completions.create(
                 model="gpt-4-turbo",
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg}
                 ],
-                temperature=0.7,
-                max_tokens=800
+                temperature=0.5,
+                max_tokens=1000
             )
-
-            data = json.loads(completion.choices[0].message.content)
+            
+            # Parse response
+            analysis = json.loads(response.choices[0].message.content)
             return {
                 "text": text,
-                "feedback": data.get("feedback", ""),
-                "enhanced_version": data.get("enhanced_version", "")
+                "feedback": analysis.get("feedback", ""),
+                "enhanced_version": analysis.get("enhanced_version", "")
             }
 
         except Exception as e:
-            logging.exception("Error in _generate_analysis")
+            logging.exception("Analysis generation failed")
             return {
                 "text": text,
-                "feedback": "Analysis failed.",
-                "enhanced_version": None,
+                "feedback": "Analysis failed",
+                "enhanced_version": "",
                 "error": str(e)
             }
+
+    # ... (rest of your existing methods remain unchanged)
 
     def find_universities(self) -> Dict:
         try:
@@ -358,5 +403,6 @@ Documents Uploaded: {len(self.user['documents'].keys())}
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
         pass
+
 
 
