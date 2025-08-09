@@ -11,21 +11,36 @@ SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
 USERS_SHEET_NAME = "EduBot_Users"
 
 def _get_usage_worksheet():
-    """Return a gspread worksheet for EduBot_Users using st.secrets creds."""
+    """Return a gspread worksheet for EduBot_Users using st.secrets creds (robust to secrets format)."""
     try:
-        creds_dict = json.loads(st.secrets["gcp_service_account"])
+        # 1) Load creds from secrets (supports dict or JSON string)
+        raw = st.secrets.get("gcp_service_account")
+        if raw is None:
+            raise RuntimeError("Missing 'gcp_service_account' in Streamlit secrets.")
+        creds_dict = json.loads(raw) if isinstance(raw, str) else dict(raw)
+
+        # 2) Authorize
         creds = Credentials.from_service_account_info(
             creds_dict,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         gc = gspread.authorize(creds)
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet(USERS_SHEET_NAME)
+
+        # 3) Open spreadsheet (allow override via secrets if present)
+        sheet_id = st.secrets.get("SPREADSHEET_ID", SPREADSHEET_ID)
+        sh = gc.open_by_key(sheet_id)
+
+        # 4) Get worksheet by name, fallback to first sheet if not found
+        try:
+            ws = sh.worksheet(USERS_SHEET_NAME)
+        except gspread.WorksheetNotFound:
+            ws = sh.sheet1  # fallback
         return ws
+
     except Exception as e:
-        # If anything fails, return None; caller may use CSV fallback
-        st.session_state["_usage_ws_error"] = str(e)
+        st.session_state["_usage_ws_error"] = repr(e)
         return None
+
 
 
 def _log_user_to_sheets(name: str):
@@ -301,6 +316,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
