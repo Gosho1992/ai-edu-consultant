@@ -1,0 +1,17 @@
+name: Keep Streamlit Awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch: {}       # lets you run it manually from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Streamlit app
+        run: |
+          curl -I --silent --show-error --max-time 20 \
+            -A "keepalive-bot/1.0" \
+            "https://ai-edu-consultant-qgxyhs3dr7sh2abk7vfj5d.streamlit.app/" || true
