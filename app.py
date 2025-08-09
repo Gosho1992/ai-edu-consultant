@@ -291,7 +291,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                     st.markdown(
                         """
                         <div style="margin-top: 1rem; font-size: 0.85rem; color: gray;">
-                        📌 <em>Scholarship summaries are sourced via public RSS feeds from ScholarshipsCorner and ScholarshipUnion. For complete details, always refer to the original websites.</em>
+                        📌 <em>Scholarship summaries are sourced via public RSS feeds. For complete details, always refer to the original websites.</em>
                         </div>
                         """, unsafe_allow_html=True
                     )
@@ -301,6 +301,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
