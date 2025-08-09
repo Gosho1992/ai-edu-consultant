@@ -162,68 +162,117 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Document upload section in sidebar
+# Document upload + purpose-aware lens in sidebar
 with st.sidebar:
     st.header("📄 Document Analysis")
+
     uploaded_file = st.file_uploader(
-        "Upload your documents for analysis",
+        "Upload a document",
         type=["pdf", "txt", "docx", "jpg", "png", "jpeg"],
         accept_multiple_files=False
     )
-    
-    if uploaded_file is not None:
-        file_extension = os.path.splitext(uploaded_file.name)[1][1:].lower()
-        valid_types = ["cv", "resume", "transcript", "sop", "motivation letter"]
-        
-        doc_type = st.selectbox(
-            "Select document type",
-            valid_types,
-            index=3 if "sop" in uploaded_file.name.lower() else 
-                 0 if "resume" in uploaded_file.name.lower() or "cv" in uploaded_file.name.lower() else
-                 1 if "transcript" in uploaded_file.name.lower() else 3
-        )
-        
-        if st.button("Analyze Document"):
-            with st.spinner(f"Analyzing your {doc_type}..."):
-                try:
-                    file_bytes = uploaded_file.read()
-                    
-                    if len(file_bytes) == 0:
-                        st.error("Uploaded file is empty")
-                        st.stop()
-                    
-                    backend_doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
-                    analysis = st.session_state.agent.analyze_document(
-                        file_bytes=file_bytes,
-                        filename=uploaded_file.name,
-                        doc_type=backend_doc_type
-                    )
-                    
-                    if analysis.get("error"):
-                        st.error(analysis["error"])
+
+    # Document type
+    valid_types = ["cv", "resume", "transcript", "sop", "motivation letter"]
+    default_idx = (
+        3 if (uploaded_file and "sop" in uploaded_file.name.lower())
+        else 0 if (uploaded_file and ("resume" in uploaded_file.name.lower() or "cv" in uploaded_file.name.lower()))
+        else 1 if (uploaded_file and "transcript" in uploaded_file.name.lower())
+        else 0
+    )
+    doc_type = st.selectbox("Select document type", valid_types, index=default_idx)
+
+    st.divider()
+
+    # 🔎 Analysis Lens (purpose-aware)
+    st.subheader("🎯 Analysis Lens")
+    purpose = st.selectbox(
+        "Analyze for",
+        ["Masters admission", "PhD admission", "Job application", "Email to professor"],
+        index=0
+    )
+    extra_context = st.text_area(
+        "Extra context (optional)",
+        placeholder="e.g., Job title + a few key requirements, target program link, professor's research area URL...",
+        height=90
+    )
+
+    analyze_clicked = st.button("Analyze Document", type="primary", use_container_width=True)
+
+# Main panel - results
+if uploaded_file is not None and analyze_clicked:
+    with st.spinner(f"Analyzing your {doc_type} for “{purpose}”..."):
+        try:
+            file_bytes = uploaded_file.read()
+            if not file_bytes:
+                st.error("Uploaded file is empty")
+                st.stop()
+
+            backend_doc_type = "cv" if doc_type in ["resume", "cv"] else doc_type
+
+            # ⤵️ Pass the new purpose/context to backend (backend will be updated next step)
+            analysis = st.session_state.agent.analyze_document(
+                file_bytes=file_bytes,
+                filename=uploaded_file.name,
+                doc_type=backend_doc_type,
+                purpose=purpose,
+                extra_context=extra_context
+            )
+
+            if analysis.get("error"):
+                st.error(analysis["error"])
+            else:
+                # Safely normalize expected fields
+                extracted_text = analysis.get("text") or ""
+                feedback = analysis.get("feedback") or ""
+                enhanced = analysis.get("enhanced_version") or ""
+                issues = analysis.get("issues") or []  # expect list of {excerpt, issue, suggested_fix}
+
+                st.subheader("Results")
+
+                # 🧭 Tabs for cleaner UX
+                tabs = st.tabs(["Feedback", "Sections to Fix", "Enhanced Version", "Extracted Text"])
+
+                with tabs[0]:
+                    if feedback.strip():
+                        st.text_area("Feedback", value=feedback, height=220, key="feedback_area", label_visibility="collapsed")
                     else:
-                        st.subheader("Analysis Results")
-                        
-                        if analysis.get("text"):
-                            st.text_area("Extracted Text", 
-                                       value=analysis["text"], 
-                                       height=200,
-                                       key="extracted_text")
-                        
-                        if analysis.get("feedback"):
-                            st.text_area("Feedback", 
-                                        value=analysis["feedback"], 
-                                        height=200,
-                                        key="feedback")
-                        
-                        if backend_doc_type == "sop" and analysis.get("enhanced_version"):
-                            st.text_area("Enhanced Version", 
-                                        value=analysis["enhanced_version"], 
-                                        height=300,
-                                        key="enhanced_version")
-                
-                except Exception as e:
-                    st.error(f"Analysis failed: {str(e)}")
-                    st.error("Please ensure you've uploaded a valid document file.")
+                        st.info("No feedback returned.")
+
+                with tabs[1]:
+                    # Build a lightweight, readable table for issues
+                    if isinstance(issues, list) and len(issues) > 0:
+                        # Normalize rows to avoid KeyErrors
+                        rows = []
+                        for it in issues:
+                            rows.append({
+                                "Excerpt": (it or {}).get("excerpt", ""),
+                                "Issue": (it or {}).get("issue", ""),
+                                "Suggested fix": (it or {}).get("suggested_fix", "")
+                            })
+                        # Use dataframe for nice sticky headers & sorting
+                        import pandas as pd
+                        df_issues = pd.DataFrame(rows, columns=["Excerpt", "Issue", "Suggested fix"])
+                        st.dataframe(df_issues, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No specific sections to fix were returned.")
+
+                with tabs[2]:
+                    if enhanced.strip():
+                        st.text_area("Enhanced Version", value=enhanced, height=300, key="enhanced_area", label_visibility="collapsed")
+                    else:
+                        st.info("No enhanced version returned.")
+
+                with tabs[3]:
+                    if extracted_text.strip():
+                        st.text_area("Extracted Text", value=extracted_text, height=200, key="extracted_area", label_visibility="collapsed")
+                    else:
+                        st.info("No extracted text returned.")
+
+        except Exception as e:
+            st.error(f"Analysis failed: {str(e)}")
+            st.error("Please ensure you've uploaded a valid document file.")
+
 
 # Chat input
 if prompt := st.chat_input("Ask me about universities or scholarships..."):
@@ -252,4 +301,5 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
