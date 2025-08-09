@@ -3,10 +3,10 @@ from backend import EducationAgent
 import os
 from datetime import datetime
 import json
-
 import gspread
 from google.oauth2.service_account import Credentials
 
+# ---- Google Sheets config ----
 SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
 USERS_SHEET_NAME = "EduBot_Users"
 
@@ -301,5 +301,6 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
