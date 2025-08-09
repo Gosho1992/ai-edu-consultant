@@ -141,144 +141,222 @@ class EducationAgent:
             return {"text": "", "source": url, "error": f"❌ URL analysis failed: {str(e)}"}
 
     # ---------- Document analyzer (single, authoritative) ----------
-    def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str) -> Dict:
-        try:
-            logging.info(f"Analyzing document: {filename}, type: {doc_type}")
+    def analyze_document(self, file_bytes: bytes, filename: str, doc_type: str, purpose: Optional[str] = None, extra_context: Optional[str] = None) -> Dict:
+    try:
+        logging.info(f"Analyzing document: {filename}, type: {doc_type}, purpose: {purpose}")
 
-            # Validate file
-            if not self._validate_file(file_bytes):
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": "❌ Invalid file (empty or >200MB)",
-                }
-
-            # Normalize doc_type
-            doc_type = (doc_type or "").strip().lower()
-            if doc_type == "resume":
-                doc_type = "cv"
-
-            # Detect file type and ensure supported
-            file_type = self._detect_file_type(file_bytes, filename)
-            logging.info(f"Detected file type: {file_type} for {filename}")
-
-            if not self._is_supported(file_type, doc_type):
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": f"❌ Unsupported {file_type} format for {doc_type} analysis",
-                }
-
-            # ---- Extract text (prefer the shared helper where applicable) ----
-            if file_type == "pdf":
-                # use shared helper
-                text = parse_uploaded_file(file_bytes, "application/pdf")
-            elif file_type in {"jpg", "png"}:
-                # use shared helper (OCR)
-                text = parse_uploaded_file(file_bytes, f"image/{file_type}")
-            elif file_type == "docx":
-                # native DOCX extraction
-                text = "\n".join(Document(io.BytesIO(file_bytes)).paragraphs[i].text
-                                 for i in range(len(Document(io.BytesIO(file_bytes)).paragraphs)))
-            elif file_type == "txt":
-                text = file_bytes.decode("utf-8", errors="ignore")
-            else:
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": f"❌ Unsupported file type: {file_type}",
-                }
-
-            if not text or not text.strip():
-                return {
-                    "text": "",
-                    "feedback": "",
-                    "enhanced_version": "",
-                    "error": "❌ Extracted text is empty",
-                }
-
-            # ---- Generate LLM analysis (JSON mode, single client) ----
-            analysis = self._generate_analysis(text, doc_type)
-
-            return {
-                "text": analysis.get("text", text),
-                "feedback": analysis.get("feedback", ""),
-                "enhanced_version": analysis.get("enhanced_version", "") if doc_type == "sop" else "",
-                "error": analysis.get("error", ""),
-            }
-
-        except Exception as e:
-            logging.exception(f"Document analysis failed for {filename}: {str(e)}")
+        # Validate file
+        if not self._validate_file(file_bytes):
             return {
                 "text": "",
                 "feedback": "",
                 "enhanced_version": "",
-                "error": f"❌ Analysis failed: {str(e)}",
+                "issues": [],
+                "error": "❌ Invalid file (empty or >200MB)",
             }
 
-    def _generate_analysis(self, text: str, doc_type: str) -> Dict:
-        """
-        Uses JSON mode for reliable parsing. No tiktoken import; we do a safe char trim.
-        """
-        try:
-            # conservative input length to avoid model overrun
-            max_chars = 3000 if doc_type in {"sop", "cv"} else 1000
-            trimmed = (text[:max_chars].rstrip() + "...") if len(text) > max_chars else text
+        # Normalize doc_type
+        doc_type = (doc_type or "").strip().lower()
+        if doc_type == "resume":
+            doc_type = "cv"
 
-            system_msg = (
-                f"You are a precise reviewer for a {doc_type}. "
-                f"Return strict JSON with keys: feedback (string), enhanced_version (string). "
-                f"Be concise but actionable in feedback. The enhanced_version should be a professional rewrite."
-            )
+        # Detect file type and ensure supported
+        file_type = self._detect_file_type(file_bytes, filename)
+        logging.info(f"Detected file type: {file_type} for {filename}")
 
-            user_payload = {
-                "document_type": doc_type,
-                "text": trimmed,
-                "instructions": [
-                    "1) Provide short, actionable feedback.",
-                    "2) Provide a professionally rewritten version.",
-                ],
-            }
-
-            completion = self.client.chat.completions.create(
-                model="gpt-4-turbo",
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": json.dumps(user_payload)},
-                ],
-                temperature=0.5,
-                max_tokens=900,
-            )
-
-            raw = completion.choices[0].message.content or "{}"
-            data = {}
-            try:
-                data = json.loads(raw)
-            except Exception:
-                # Fallback if model didn't return valid JSON (rare with response_format)
-                data = {"feedback": "Could not parse structured output.", "enhanced_version": ""}
-
-            self.metrics["gpt_calls"] += 1
-
+        if not self._is_supported(file_type, doc_type):
             return {
-                "text": trimmed,
-                "feedback": data.get("feedback", ""),
-                "enhanced_version": data.get("enhanced_version", ""),
-                "error": "",
-            }
-
-        except Exception as e:
-            logging.exception("Error in _generate_analysis")
-            return {
-                "text": text,
-                "feedback": "Analysis failed.",
+                "text": "",
+                "feedback": "",
                 "enhanced_version": "",
-                "error": str(e),
+                "issues": [],
+                "error": f"❌ Unsupported {file_type} format for {doc_type} analysis",
             }
+
+        # ---- Extract text (prefer the shared helper where applicable) ----
+        if file_type == "pdf":
+            text = parse_uploaded_file(file_bytes, "application/pdf")
+        elif file_type in {"jpg", "png"}:
+            text = parse_uploaded_file(file_bytes, f"image/{file_type}")
+        elif file_type == "docx":
+            # native DOCX extraction
+            import io
+            from docx import Document
+            text = "\n".join(
+                Document(io.BytesIO(file_bytes)).paragraphs[i].text
+                for i in range(len(Document(io.BytesIO(file_bytes)).paragraphs))
+            )
+        elif file_type == "txt":
+            text = file_bytes.decode("utf-8", errors="ignore")
+        else:
+            return {
+                "text": "",
+                "feedback": "",
+                "enhanced_version": "",
+                "issues": [],
+                "error": f"❌ Unsupported file type: {file_type}",
+            }
+
+        if not text or not text.strip():
+            return {
+                "text": "",
+                "feedback": "",
+                "enhanced_version": "",
+                "issues": [],
+                "error": "❌ Extracted text is empty",
+            }
+
+        # ---- Generate LLM analysis (purpose-aware) ----
+        analysis = self._generate_analysis(text, doc_type, purpose=purpose, extra_context=extra_context)
+
+        return {
+            "text": analysis.get("text", text),
+            "feedback": analysis.get("feedback", ""),
+            # keep enhanced_version available for any doc_type (front-end decides showing)
+            "enhanced_version": analysis.get("enhanced_version", ""),
+            "issues": analysis.get("issues", []),
+            "error": analysis.get("error", ""),
+        }
+
+    except Exception as e:
+        logging.exception(f"Document analysis failed for {filename}: {str(e)}")
+        return {
+            "text": "",
+            "feedback": "",
+            "enhanced_version": "",
+            "issues": [],
+            "error": f"❌ Analysis failed: {str(e)}",
+        }
+
+    def _generate_analysis(self, text: str, doc_type: str, purpose: Optional[str] = None, extra_context: Optional[str] = None) -> Dict:
+    """
+    Purpose-aware reviewer. Returns JSON:
+      {
+        "feedback": str,
+        "enhanced_version": str,
+        "issues": [{"excerpt": str, "issue": str, "suggested_fix": str}, ...]
+      }
+    """
+    try:
+        # conservative input length to avoid model overrun
+        # give SOP/CV more room; others slightly less
+        max_chars = 4000 if doc_type in {"sop", "cv", "motivation letter"} else 2000
+        trimmed = (text[:max_chars].rstrip() + "...") if len(text) > max_chars else text
+
+        # Normalize controls
+        purpose_norm = (purpose or "").strip()
+        extra = (extra_context or "").strip()
+
+        # Build a crisp system message
+        # The model must return strict JSON with fields we expect.
+        system_msg = (
+            "You are a precise, purpose-aware document reviewer. "
+            "Always return STRICT JSON with keys: "
+            "feedback (string), enhanced_version (string), issues (array of objects with keys excerpt, issue, suggested_fix). "
+            "Do NOT include markdown, backticks, or commentary outside JSON. "
+            "Your job: "
+            "1) Give concise, actionable feedback tailored to the stated purpose. "
+            "2) Produce a professionally rewritten version (keep content truthful; do not fabricate credentials). "
+            "3) Identify specific problems as an array of issues, each with a short excerpt (from the user's text), the issue, and a suggested fix."
+        )
+
+        # Purpose instructions
+        # We keep them compact and targeted.
+        purpose_hint = ""
+        if purpose_norm:
+            if purpose_norm.lower().startswith("masters"):
+                purpose_hint = (
+                    "Target: Master's admission. Emphasize clarity of goals, relevant coursework/projects, "
+                    "impact, and fit with target program; avoid generic statements."
+                )
+            elif purpose_norm.lower().startswith("phd"):
+                purpose_hint = (
+                    "Target: PhD admission. Prioritize research readiness, problem statements, methodology, "
+                    "publications, alignment with advisor/lab, and long-term research vision."
+                )
+            elif purpose_norm.lower().startswith("job"):
+                purpose_hint = (
+                    "Target: Job application. Emphasize quantified achievements, skills relevant to the role, "
+                    "ATS-friendly phrasing, and clear impact aligned to the job description."
+                )
+            elif purpose_norm.lower().startswith("email"):
+                purpose_hint = (
+                    "Target: Email to professor. Keep it brief and respectful; show genuine alignment with their research, "
+                    "mention 1–2 relevant works, and ask a specific question or next step."
+                )
+            else:
+                purpose_hint = f"Target: {purpose_norm}. Keep tone and structure appropriate to this purpose."
+
+        # Extra context (e.g., JD bullets, program link themes)
+        extra_hint = f"Additional context (may guide tailoring): {extra}" if extra else "No extra context provided."
+
+        user_payload = {
+            "document_type": doc_type,
+            "purpose": purpose_norm or "",
+            "extra_context": extra or "",
+            "text": trimmed,
+            "instructions": [
+                purpose_hint,
+                "Make feedback concise and actionable (3–8 bullet points).",
+                "Enhanced version must read naturally and reflect the user's content; do not invent facts.",
+                "Issues array: 3–10 items with short excerpt, issue, and suggested_fix.",
+            ],
+        }
+
+        completion = self.client.chat.completions.create(
+            model="gpt-4-turbo",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
+            ],
+            temperature=0.3,
+            max_tokens=1400,
+        )
+
+        raw = completion.choices[0].message.content or "{}"
+        data = {}
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {
+                "feedback": "Could not parse structured output.",
+                "enhanced_version": "",
+                "issues": []
+            }
+
+        self.metrics["gpt_calls"] += 1
+
+        # Normalize issues to a list of dicts
+        issues = data.get("issues", [])
+        if not isinstance(issues, list):
+            issues = []
+        normalized_issues = []
+        for it in issues:
+            normalized_issues.append({
+                "excerpt": (it or {}).get("excerpt", "")[:400],
+                "issue": (it or {}).get("issue", "")[:400],
+                "suggested_fix": (it or {}).get("suggested_fix", "")[:400],
+            })
+
+        return {
+            "text": trimmed,
+            "feedback": data.get("feedback", ""),
+            "enhanced_version": data.get("enhanced_version", ""),
+            "issues": normalized_issues,
+            "error": "",
+        }
+
+    except Exception as e:
+        logging.exception("Error in _generate_analysis")
+        return {
+            "text": text,
+            "feedback": "Analysis failed.",
+            "enhanced_version": "",
+            "issues": [],
+            "error": str(e),
+        }
+
 
     # ---------- Chat responses with live scholarships (left intact) ----------
     def generate_response(self, prompt: str, context: List[Dict] = None) -> str:
@@ -406,3 +484,4 @@ Documents Uploaded: {len(self.user['documents'].keys())}
 
     def _generate_gpt_recommendations(self) -> List[Dict]:
         pass
+
