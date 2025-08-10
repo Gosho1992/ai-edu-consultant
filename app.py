@@ -130,7 +130,7 @@ if "username" not in st.session_state:
 # ---- Welcome + username capture ----
 if not st.session_state.onboarded:
     st.markdown("## 👋 Welcome to **AI Education Consultant**")
-    st.caption("Enter a username to continue. We only log your name and a timestamp in Google Sheets.")
+    st.caption("Enter any username to continue. We only need this to track traffic.")
 
     with st.form("welcome_form", clear_on_submit=False):
         username_input = st.text_input("Your username", value=st.session_state.username, max_chars=50)
@@ -316,6 +316,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
