@@ -60,6 +60,91 @@ def _log_user_to_sheets(name: str):
 # Set up the app
 st.set_page_config(page_title="EduBot", page_icon="🎓")
 
+# ---- Page + responsive/mobile CSS (add near the top) ----
+st.set_page_config(
+    page_title="EduBot",
+    page_icon="🎓",
+    layout="wide",                       # more breathing room on mobile
+    initial_sidebar_state="collapsed"    # sidebar starts hidden on phones
+)
+
+def apply_responsive_css():
+    st.markdown("""
+    <style>
+    /* Base container paddings (desktop vs mobile) */
+    .block-container {
+        padding-top: 1.25rem;
+        padding-bottom: 5rem; /* keep content above chat input */
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    @media (max-width: 640px) {
+        .block-container {
+            padding-left: 0.9rem !important;
+            padding-right: 0.9rem !important;
+            padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important;
+        }
+    }
+
+    /* Ensure text is readable in both themes */
+    :root, .stApp {
+        color-scheme: light dark;
+    }
+    /* Light mode subtle dot grid */
+    @media (prefers-color-scheme: light) {
+        .stApp {
+            background: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 1px);
+            background-size: 18px 18px;
+            background-color: #f9fafb;
+        }
+    }
+    /* Dark mode: higher contrast but still subtle */
+    @media (prefers-color-scheme: dark) {
+        .stApp {
+            background:
+                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 1px);
+            background-size: 18px 18px;
+            background-color: #111418;
+        }
+    }
+
+    /* Inputs: visible label/placeholder + 16px font to stop mobile auto-zoom */
+    label, .stMarkdown p, .stCaption {
+        line-height: 1.4;
+    }
+    .stTextInput input, .stTextArea textarea {
+        font-size: 16px !important;
+        min-height: 44px;        /* touch target */
+    }
+    .stTextInput input::placeholder,
+    .stTextArea textarea::placeholder {
+        opacity: .75;
+    }
+
+    /* Buttons: full-width on mobile for easier tapping */
+    @media (max-width: 640px) {
+        .stButton>button {
+            width: 100%;
+            height: 44px;
+            font-size: 16px;
+        }
+    }
+
+    /* Chat input: keep it clear of Android/iOS bottom bars */
+    .stChatInput {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    /* Sidebar: make sure controls don’t overflow on small screens */
+    section[data-testid="stSidebar"] .css-1d391kg {  /* selector fallback */
+        overflow-y: auto !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+apply_responsive_css()
+
+
 # ---- Lightweight background pattern (pure CSS) ----
 def set_bg_pattern(style: str = "dots"):
     css = ""
@@ -133,8 +218,14 @@ if not st.session_state.onboarded:
     st.caption("Enter any username to continue. We only need this to track traffic.")
 
     with st.form("welcome_form", clear_on_submit=False):
-        username_input = st.text_input("Your username", value=st.session_state.username, max_chars=50)
-        submitted = st.form_submit_button("Continue")
+    username_input = st.text_input(
+        "Enter your username",
+        value=st.session_state.username,
+        max_chars=50,
+        placeholder="e.g., Zain",
+        help="We only save name + timestamp to count unique users."
+    )
+    submitted = st.form_submit_button("Continue")
 
     if submitted:
         username_input = (username_input or "").strip()
@@ -316,6 +407,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
