@@ -57,9 +57,6 @@ def _log_user_to_sheets(name: str):
         return False, f"Sheets not available: {st.session_state.get('_usage_ws_error')}"
 
 
-# Set up the app
-st.set_page_config(page_title="EduBot", page_icon="🎓")
-
 # ---- Page + responsive/mobile CSS (add near the top) ----
 st.set_page_config(
     page_title="EduBot",
@@ -212,20 +209,21 @@ if "onboarded" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
+
 # ---- Welcome + username capture ----
 if not st.session_state.onboarded:
     st.markdown("## 👋 Welcome to **AI Education Consultant**")
     st.caption("Enter any username to continue. We only need this to track traffic.")
 
     with st.form("welcome_form", clear_on_submit=False):
-    username_input = st.text_input(
-        "Enter your username",
-        value=st.session_state.username,
-        max_chars=50,
-        placeholder="e.g., Zain",
-        help="We only save name + timestamp to count unique users."
-    )
-    submitted = st.form_submit_button("Continue")
+        username_input = st.text_input(
+            "Enter your username",
+            value=st.session_state.username,
+            max_chars=50,
+            placeholder="e.g., Zain",
+            help="We only save name + timestamp to count unique users."
+        )
+        submitted = st.form_submit_button("Continue")
 
     if submitted:
         username_input = (username_input or "").strip()
@@ -407,6 +405,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
