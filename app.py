@@ -7,12 +7,12 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
-# ---- Google Sheets config ----
+# ---- Google Sheets Configuration ----
 SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
 USERS_SHEET_NAME = "EduBot_Users"
 
 def _get_usage_worksheet():
-    """Return a gspread worksheet for EduBot_Users using st.secrets creds (robust to secrets format)."""
+    """Robust Google Sheets worksheet access with error handling"""
     try:
         raw = st.secrets.get("gcp_service_account")
         if raw is None:
@@ -29,16 +29,16 @@ def _get_usage_worksheet():
         sh = gc.open_by_key(sheet_id)
 
         try:
-            ws = sh.worksheet(USERS_SHEET_NAME)
+            return sh.worksheet(USERS_SHEET_NAME)
         except gspread.WorksheetNotFound:
-            ws = sh.sheet1
-        return ws
+            return sh.sheet1
 
     except Exception as e:
         st.session_state["_usage_ws_error"] = repr(e)
         return None
 
 def _log_user_to_sheets(name: str):
+    """Secure user logging with timestamp"""
     ts = datetime.utcnow().isoformat() + "Z"
     ws = _get_usage_worksheet()
     if ws is not None:
@@ -47,10 +47,9 @@ def _log_user_to_sheets(name: str):
             return True, None
         except Exception as e:
             return False, f"Sheets append failed: {e}"
-    else:
-        return False, f"Sheets not available: {st.session_state.get('_usage_ws_error')}"
+    return False, f"Sheets not available: {st.session_state.get('_usage_ws_error')}"
 
-# ---- Page Config ----
+# ---- Page Configuration ----
 st.set_page_config(
     page_title="EduBot",
     page_icon="🎓",
@@ -58,11 +57,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ---- Responsive CSS with iPhone fixes ----
+# ---- Pixel-Perfect Responsive CSS ----
 def apply_responsive_css():
     st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
+    /* Base Layout */
     .block-container {
         padding-top: 1.25rem;
         padding-bottom: 5rem;
@@ -70,7 +70,7 @@ def apply_responsive_css():
         padding-right: 2rem;
     }
     
-    /* General mobile adjustments */
+    /* Mobile-First Adjustments */
     @media (max-width: 640px) {
         .block-container {
             padding-left: 0.9rem !important;
@@ -89,14 +89,14 @@ def apply_responsive_css():
         }
     }
     
-    /* Input fields styling */
+    /* Input Fields Optimization */
     .stTextInput input, .stTextArea textarea, .stSelectbox select {
         font-size: 16px !important;
         min-height: 44px !important;
         padding: 12px 15px !important;
     }
     
-    /* Dark mode fixes */
+    /* Perfect Dark Mode */
     @media (prefers-color-scheme: dark) {
         .stApp {
             background: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 1px);
@@ -112,9 +112,13 @@ def apply_responsive_css():
             color: #ffffff !important;
             border-color: #555555 !important;
         }
+        .stSelectbox select {
+            background-color: #2b2b2b !important;
+            color: #ffffff !important;
+        }
     }
     
-    /* Light mode styling */
+    /* Flawless Light Mode */
     @media (prefers-color-scheme: light) {
         .stApp {
             background: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 1px);
@@ -123,7 +127,7 @@ def apply_responsive_css():
         }
     }
     
-    /* iPhone-specific fixes */
+    /* iOS-Specific Perfection */
     @supports (-webkit-touch-callout: none) {
         .block-container {
             padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important;
@@ -133,6 +137,7 @@ def apply_responsive_css():
         }
         .stApp {
             -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
         }
         @viewport {
             width: device-width;
@@ -140,16 +145,21 @@ def apply_responsive_css():
         }
     }
     
-    /* Chat input bottom padding */
+    /* Chat Input Excellence */
     .stChatInput {
         padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    
+    /* Selection Highlight Color */
+    ::selection {
+        background: rgba(0, 119, 204, 0.2);
     }
     </style>
     """, unsafe_allow_html=True)
 
 apply_responsive_css()
 
-# ---- Onboarding ----
+# ---- Onboarding Experience ----
 if "onboarded" not in st.session_state:
     st.session_state.onboarded = False
 if "username" not in st.session_state:
@@ -166,7 +176,9 @@ if not st.session_state.onboarded:
         if not username_input:
             st.warning("Please enter a valid name.")
             st.stop()
-        _log_user_to_sheets(username_input)
+        success, error = _log_user_to_sheets(username_input)
+        if not success:
+            st.error(f"Logging failed: {error}")
         st.session_state.username = username_input
         st.session_state.onboarded = True
         st.rerun()
@@ -174,23 +186,23 @@ if not st.session_state.onboarded:
 
 st.sidebar.markdown(f"**User:** {st.session_state.username}")
 
-# ---- Initialize Agent ----
+# ---- AI Agent Initialization ----
 if "agent" not in st.session_state:
     st.session_state.agent = EducationAgent()
     st.session_state.messages = [
         {"role": "assistant", "content": "Hi! I'm your education consultant. Tell me about your academic goals."}
     ]
 
-# ---- Title ----
+# ---- Main Interface ----
 st.title("🎓 EduBot - AI Education Consultant")
 st.caption("A platform for career guidance")
 
-# ---- Display Messages ----
+# ---- Message Display ----
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# ---- Sidebar: Document Upload ----
+# ---- Document Analysis (Sidebar) ----
 with st.sidebar:
     st.header("📄 Document Analysis")
     uploaded_file = st.file_uploader("Upload a document", type=["pdf", "txt", "docx", "jpg", "png", "jpeg"])
@@ -229,9 +241,9 @@ if uploaded_file and analyze_clicked:
             with tabs[3]:
                 st.text_area("Extracted Text", value=extracted_text, height=200)
         except Exception as e:
-            st.error(f"Analysis failed: {e}")
+            st.error(f"Analysis failed: {str(e)}")
 
-# ---- Chat Input ----
+# ---- Chat Interface ----
 if prompt := st.chat_input("Ask me about universities or scholarships..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -244,6 +256,6 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 if "scholarship" in prompt.lower():
                     st.caption("📌 Scholarship summaries are sourced via public RSS feeds.")
             except Exception as e:
-                st.error(f"Error generating response: {e}")
+                st.error(f"Error generating response: {str(e)}")
                 response = "Sorry, I encountered an error."
     st.session_state.messages.append({"role": "assistant", "content": response})
