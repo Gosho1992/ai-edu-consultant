@@ -58,9 +58,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ---- Responsive CSS ----
+# ---- Responsive CSS with iPhone fixes ----
 def apply_responsive_css():
     st.markdown("""
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
     .block-container {
         padding-top: 1.25rem;
@@ -68,16 +69,52 @@ def apply_responsive_css():
         padding-left: 2rem;
         padding-right: 2rem;
     }
+    
+    /* General mobile adjustments */
     @media (max-width: 640px) {
         .block-container {
             padding-left: 0.9rem !important;
             padding-right: 0.9rem !important;
             padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important;
         }
+        .stButton>button {
+            width: 100%;
+            height: 48px;
+            font-size: 16px;
+            padding: 12px 24px;
+        }
+        .stChatMessage {
+            margin: 8px 0;
+            padding: 12px 16px;
+        }
     }
-    :root, .stApp {
-        color-scheme: light dark;
+    
+    /* Input fields styling */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+        font-size: 16px !important;
+        min-height: 44px !important;
+        padding: 12px 15px !important;
     }
+    
+    /* Dark mode fixes */
+    @media (prefers-color-scheme: dark) {
+        .stApp {
+            background: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 1px);
+            background-size: 18px 18px;
+            background-color: #111418;
+        }
+        .stMarkdown, .stTextInput label, .stSelectbox label, .stTextArea label,
+        .stButton>button, .stChatMessage, .stAlert {
+            color: #ffffff !important;
+        }
+        .stTextInput input, .stTextArea textarea {
+            background-color: #2b2b2b !important;
+            color: #ffffff !important;
+            border-color: #555555 !important;
+        }
+    }
+    
+    /* Light mode styling */
     @media (prefers-color-scheme: light) {
         .stApp {
             background: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 1px);
@@ -85,24 +122,25 @@ def apply_responsive_css():
             background-color: #f9fafb;
         }
     }
-    @media (prefers-color-scheme: dark) {
+    
+    /* iPhone-specific fixes */
+    @supports (-webkit-touch-callout: none) {
+        .block-container {
+            padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important;
+        }
+        .stChatInput {
+            padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+        }
         .stApp {
-            background: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 1px);
-            background-size: 18px 18px;
-            background-color: #111418;
+            -webkit-font-smoothing: antialiased;
+        }
+        @viewport {
+            width: device-width;
+            zoom: 1.0;
         }
     }
-    .stTextInput input, .stTextArea textarea {
-        font-size: 16px !important;
-        min-height: 44px;
-    }
-    @media (max-width: 640px) {
-        .stButton>button {
-            width: 100%;
-            height: 44px;
-            font-size: 16px;
-        }
-    }
+    
+    /* Chat input bottom padding */
     .stChatInput {
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -110,35 +148,6 @@ def apply_responsive_css():
     """, unsafe_allow_html=True)
 
 apply_responsive_css()
-
-# ---- Background Pattern ----
-def set_bg_pattern(style: str = "dots"):
-    if style == "dots":
-        css = """
-        <style>
-        .stApp {
-            background: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 1px);
-            background-size: 18px 18px;
-            background-color: #f9fafb;
-        }
-        </style>
-        """
-    elif style == "grid":
-        css = """
-        <style>
-        .stApp {
-            background: linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px);
-            background-size: 28px 28px;
-            background-color: #fbfdff;
-        }
-        </style>
-        """
-    else:
-        css = "<style>.stApp { background-color: #fafafa; }</style>"
-    st.markdown(css, unsafe_allow_html=True)
-
-set_bg_pattern("dots")
 
 # ---- Onboarding ----
 if "onboarded" not in st.session_state:
@@ -192,7 +201,7 @@ with st.sidebar:
     analyze_clicked = st.button("Analyze Document", type="primary", use_container_width=True)
 
 if uploaded_file and analyze_clicked:
-    with st.spinner(f"Analyzing your {doc_type} for “{purpose}”..."):
+    with st.spinner(f"Analyzing your {doc_type} for '{purpose}'..."):
         try:
             analysis = st.session_state.agent.analyze_document(
                 file_bytes=uploaded_file.read(),
