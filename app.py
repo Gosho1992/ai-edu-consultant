@@ -169,7 +169,7 @@ if "agent" not in st.session_state:
 
 # Title and description
 st.title("🎓 EduBot - AI Education Consultant")
-st.caption("A ChatGPT-like interface for university guidance")
+st.caption("A platform for career guidance")
 
 # Display chat messages
 for message in st.session_state.messages:
@@ -316,6 +316,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
         
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
