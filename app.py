@@ -11,27 +11,39 @@ SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
 USERS_SHEET_NAME = "EduBot_Users"
 
 def _get_usage_worksheet():
-    """Robust Google Sheets worksheet access with error handling."""
+    """Return a gspread worksheet using creds from env (Render) or st.secrets (Streamlit)."""
     try:
-        raw = st.secrets.get("gcp_service_account")
-        if raw is None:
-            raise RuntimeError("Missing 'gcp_service_account' in Streamlit secrets.")
-        creds_dict = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        # 1) Load service account JSON string (Render env var OR Streamlit secrets)
+        raw = (
+            os.getenv("gcp_service_account")               # Render / any Docker host
+            or st.secrets.get("gcp_service_account", None) # Streamlit Cloud
+        )
+        if not raw:
+            raise RuntimeError("Missing service account JSON in env var 'gcp_service_account' "
+                               "or Streamlit secret 'gcp_service_account'.")
 
+        # If we got a dict from Streamlit secrets, keep it; if string, parse to dict
+        creds_dict = raw if isinstance(raw, dict) else json.loads(raw)
+
+        # 2) Authorize
         creds = Credentials.from_service_account_info(
             creds_dict,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         gc = gspread.authorize(creds)
 
-        sheet_id = st.secrets.get("SPREADSHEET_ID", SPREADSHEET_ID)
+        # 3) Spreadsheet + worksheet
+        sheet_id = os.getenv("SPREADSHEET_ID") or st.secrets.get("SPREADSHEET_ID") or SPREADSHEET_ID
+        ws_name  = os.getenv("USERS_SHEET_NAME") or st.secrets.get("USERS_SHEET_NAME") or USERS_SHEET_NAME
+
         sh = gc.open_by_key(sheet_id)
         try:
-            return sh.worksheet(USERS_SHEET_NAME)
+            return sh.worksheet(ws_name)
         except gspread.WorksheetNotFound:
             return sh.sheet1
+
     except Exception as e:
-        st.session_state["_usage_ws_error"] = repr(e)
+        st.session_state["_usage_ws_error"] = str(e)
         return None
 
 def _log_user_to_sheets(name: str):
@@ -277,3 +289,4 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
 
     st.session_state.messages.append({"role": "assistant", "content": response})
+
