@@ -6,6 +6,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pandas as pd
 import os  # keep this
+import traceback
 
 # ========= Google Sheets =========
 SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
@@ -79,7 +80,25 @@ def _get_usage_worksheet():
     except Exception as e:
         st.session_state["_usage_ws_error"] = f"{type(e).__name__}: {e}"
         return None
+        
+def _sheets_healthcheck():
+    """Try a direct append to verify auth/worksheet are correct."""
+    ts = datetime.utcnow().isoformat() + "Z"
+    try:
+        ws = _get_usage_worksheet()
+        if not ws:
+            err = st.session_state.get("_usage_ws_error", "worksheet unavailable")
+            st.error(f"Sheets healthcheck: {err}")
+            print(f"[Sheets HC] Worksheet unavailable: {err}")
+            return
 
+        ws.append_row(["HEALTHCHECK", ts], value_input_option="RAW")
+        st.success(f"Sheets healthcheck: ✅ wrote HEALTHCHECK at {ts}")
+        print(f"[Sheets HC] Success at {ts}")
+    except Exception as e:
+        st.error(f"Sheets healthcheck failed: {e}")
+        print("[Sheets HC] Exception:", repr(e))
+        print(traceback.format_exc())
 def _log_user_to_sheets(name: str):
     """Append [Name, TimestampUTC] to Google Sheets (with graceful fallback)."""
     ts = datetime.now(timezone.utc).isoformat()  # avoids utcnow() deprecation
@@ -257,6 +276,10 @@ with st.sidebar:
     )
 
     analyze_clicked = st.button("Analyze Document", type="primary", use_container_width=True)
+    
+    st.divider()
+    if st.button("🔧 Test Google Sheets write", key="sheets_hc"):
+        _sheets_healthcheck()
 
 # ========= Analysis Results =========
 if uploaded_file and analyze_clicked:
@@ -335,6 +358,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
 
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
