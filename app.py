@@ -5,50 +5,75 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pandas as pd
-import os  # <-- you were missing this
+import os  # keep this
 
 # ========= Google Sheets =========
 SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
 USERS_SHEET_NAME = "EduBot_Users"
 
+# NEW: default location for the Render Secret File you uploaded
+SERVICE_ACCOUNT_FILE = os.getenv("GCP_SERVICE_ACCOUNT_FILE", "/etc/secrets/scholarship-bot.json")
+
 def _get_usage_worksheet():
-    """Return a gspread worksheet using creds from env (Render) or st.secrets (Streamlit)."""
+    """
+    Return a gspread worksheet using credentials from (in priority order):
+      1) Render Secret File: /etc/secrets/scholarship-bot.json
+      2) Env var: gcp_service_account (JSON string)
+      3) st.secrets["gcp_service_account"] (Streamlit Cloud)
+    """
     try:
-        # 1) Load service account JSON (Render env var or Streamlit secrets)
-        raw = os.getenv("gcp_service_account")
-        if not raw:
+        creds_dict = None
+
+        # --- 1) Prefer the secret file on Render ---
+        if os.path.exists(SERVICE_ACCOUNT_FILE):
+            with open(SERVICE_ACCOUNT_FILE, "r") as f:
+                creds_dict = json.load(f)
+
+        # --- 2) Fallback to env var JSON string ---
+        if creds_dict is None:
+            raw = os.getenv("gcp_service_account")
+            if raw:
+                creds_dict = json.loads(raw)
+
+        # --- 3) Fallback to Streamlit secrets ---
+        if creds_dict is None:
             try:
-                raw = st.secrets.get("gcp_service_account", None)  # safe on Streamlit Cloud
+                raw = st.secrets.get("gcp_service_account", None)
+                if raw:
+                    creds_dict = raw if isinstance(raw, dict) else json.loads(raw)
             except Exception:
-                raw = None
-        if not raw:
+                pass
+
+        if creds_dict is None:
             raise RuntimeError(
-                "Missing service account JSON in env var 'gcp_service_account' "
-                "or Streamlit secret 'gcp_service_account'."
+                "No Google credentials found. Expected secret file at "
+                f"{SERVICE_ACCOUNT_FILE} or 'gcp_service_account' in env/Streamlit secrets."
             )
 
-        # On Streamlit, st.secrets may already be a dict; on Render it's a JSON string
-        creds_dict = raw if isinstance(raw, dict) else json.loads(raw)
-
-        # 2) Authorize
+        # Authorize
         creds = Credentials.from_service_account_info(
             creds_dict,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         gc = gspread.authorize(creds)
 
-        # 3) Spreadsheet and worksheet names (env -> secrets -> defaults)
-        sheet_id = os.getenv("SPREADSHEET_ID") or (
-            st.secrets.get("SPREADSHEET_ID") if "secrets" in dir(st) else None
-        ) or SPREADSHEET_ID
-        ws_name  = os.getenv("USERS_SHEET_NAME") or (
-            st.secrets.get("USERS_SHEET_NAME") if "secrets" in dir(st) else None
-        ) or USERS_SHEET_NAME
+        # Spreadsheet + worksheet resolution (env -> secrets -> default)
+        sheet_id = (
+            os.getenv("SPREADSHEET_ID")
+            or (st.secrets.get("SPREADSHEET_ID") if hasattr(st, "secrets") else None)
+            or SPREADSHEET_ID
+        )
+        ws_name = (
+            os.getenv("USERS_SHEET_NAME")
+            or (st.secrets.get("USERS_SHEET_NAME") if hasattr(st, "secrets") else None)
+            or USERS_SHEET_NAME
+        )
 
         sh = gc.open_by_key(sheet_id)
         try:
             return sh.worksheet(ws_name)
         except gspread.WorksheetNotFound:
+            # Fallback to first sheet if the named one doesn't exist
             return sh.sheet1
 
     except Exception as e:
@@ -310,5 +335,6 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
 
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
