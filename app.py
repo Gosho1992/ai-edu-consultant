@@ -5,90 +5,49 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pandas as pd
-import os  # keep this
+import os
 import traceback
 
 # ========= Google Sheets =========
-SPREADSHEET_ID = "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc"
-USERS_SHEET_NAME = "EduBot_Users"
-
-# NEW: default location for the Render Secret File you uploaded
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1F5XT-ydRjG_Sy9iqK2610kG96HkBZ2gwuCSGMW3LKbc")
+USERS_SHEET_NAME = os.getenv("USERS_SHEET_NAME", "EduBot_Users")
 SERVICE_ACCOUNT_FILE = os.getenv("GCP_SERVICE_ACCOUNT_FILE", "/etc/secrets/scholarship-bot.json")
 
 
 def _get_usage_worksheet():
     """
-    Return a gspread worksheet using, in order of priority:
-      1) Render Secret File (/etc/secrets/scholarship-bot.json)
-      2) Env var gcp_service_account (JSON string)
-      3) st.secrets["gcp_service_account"] (for Streamlit Cloud)
+    Authorize Google Sheets using the Render-mounted secret file only.
+    Returns the gspread worksheet object.
     """
     try:
-        # --- 1) Render Secret File (recommended on Render) ---
-        sa_path = os.getenv("GCP_SA_FILE", "/etc/secrets/scholarship-bot.json")
-        creds_dict = None
+        # Load from mounted Render secret file
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            raise FileNotFoundError(f"Service account file not found at {SERVICE_ACCOUNT_FILE}")
 
-        if sa_path and os.path.exists(sa_path):
-            with open(sa_path, "r") as f:
-                creds_dict = json.load(f)
-                print(f"[Sheets] Loaded service account from file: {sa_path}")
+        with open(SERVICE_ACCOUNT_FILE, "r") as f:
+            creds_dict = json.load(f)
 
-        # --- 2) Env var with whole JSON (optional fallback) ---
-        if creds_dict is None:
-            raw = os.getenv("gcp_service_account")
-            if raw:
-                creds_dict = raw if isinstance(raw, dict) else json.loads(raw)
-                print("[Sheets] Loaded service account from env var gcp_service_account")
-
-        # --- 3) Streamlit secrets (for Streamlit Cloud) ---
-        if creds_dict is None:
-            try:
-                raw = st.secrets.get("gcp_service_account", None)
-            except Exception:
-                raw = None
-            if raw:
-                creds_dict = raw if isinstance(raw, dict) else json.loads(raw)
-                print("[Sheets] Loaded service account from st.secrets")
-
-        if creds_dict is None:
-            raise RuntimeError(
-                "No service account found in /etc/secrets/scholarship-bot.json, "
-                "env var gcp_service_account, or st.secrets['gcp_service_account']."
-            )
-
-        # Authorize Sheets
         creds = Credentials.from_service_account_info(
             creds_dict,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         gc = gspread.authorize(creds)
 
-        # Resolve spreadsheet & worksheet names
-        sheet_id = (
-            os.getenv("SPREADSHEET_ID")
-            or (st.secrets.get("SPREADSHEET_ID") if hasattr(st, "secrets") else None)
-            or SPREADSHEET_ID
-        )
-        ws_name = (
-            os.getenv("USERS_SHEET_NAME")
-            or (st.secrets.get("USERS_SHEET_NAME") if hasattr(st, "secrets") else None)
-            or USERS_SHEET_NAME
-        )
-
-        # Open sheet + worksheet
-        sh = gc.open_by_key(sheet_id)
+        # Access the spreadsheet and worksheet
+        sh = gc.open_by_key(SPREADSHEET_ID)
         try:
-            ws = sh.worksheet(ws_name)
+            ws = sh.worksheet(USERS_SHEET_NAME)
         except gspread.WorksheetNotFound:
-            ws = sh.sheet1  # fallback to first tab
+            ws = sh.sheet1  # fallback to first tab if not found
 
         return ws
 
     except Exception as e:
         msg = f"{type(e).__name__}: {e}"
         st.session_state["_usage_ws_error"] = msg
-        print(f"[Sheets ERROR] {_get_usage_worksheet.__name__}: {msg}")
+        print(f"[Sheets ERROR] _get_usage_worksheet: {msg}")
         return None
+
         
 def _sheets_healthcheck():
     """Try a direct append to verify auth/worksheet are correct."""
@@ -367,6 +326,7 @@ if prompt := st.chat_input("Ask me about universities or scholarships..."):
                 response = "Sorry, I encountered an error. Please try again."
 
     st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
